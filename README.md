@@ -17,9 +17,9 @@ Os binários são baixados dos canais oficiais e assinados pelos respectivos for
 ## O que ele faz
 
 - instala Tailscale `1.102.3` em modo não assistido e conecta a estação à tailnet;
-- instala RustDesk `1.4.9` e configura o servidor ID `100.105.235.114` e o relay `100.105.235.114:21117`;
+- instala RustDesk `1.4.9` e configura os servidores ID e relay privados da Darckware;
 - permite acesso ao RustDesk por um Tailscale local ou por uma estação roteadora na rede LAN;
-- no modo roteador, cria somente a rota persistente `100.105.235.114/32`;
+- no modo roteador, cria somente uma rota persistente `/32` para o servidor autorizado;
 - testa as portas TCP `21116` e `21117` antes de instalar o RustDesk pelo roteador;
 - permite configurar, opcionalmente, uma senha permanente do RustDesk;
 - aceita reexecução: componentes existentes são reutilizados e o RustDesk é reconfigurado;

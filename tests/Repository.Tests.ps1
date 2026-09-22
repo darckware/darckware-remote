@@ -30,6 +30,11 @@ Describe 'public repository contract' {
         $readme | Should -Match '<source media="\(prefers-color-scheme: light\)" srcset="assets/darckware-lockup-light\.svg">'
     }
 
+    It 'does not disclose the private RustDesk server address in the public README' {
+        $readme = Get-Content (Join-Path $script:RepoRoot 'README.md') -Raw
+        $readme | Should -Not -Match ([regex]::Escape('100.105.235.114'))
+    }
+
     It 'pins Windows CI to Pester 5.7.1 and runs the complete suite' {
         $workflow = Get-Content (Join-Path $script:RepoRoot '.github/workflows/windows-tests.yml') -Raw
         $workflow | Should -Match 'RequiredVersion\s+5\.7\.1'
