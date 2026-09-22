@@ -126,7 +126,17 @@ function Set-RustDeskHostRoute {
     }
 
     if ($Plan.Action -in @('Reuse', 'Conflict')) {
-        return
+        $knownInterfaceIndex = $null
+        if ($null -ne $Plan.PSObject.Properties['ExistingInterfaceIndex']) {
+            $knownInterfaceIndex = $Plan.ExistingInterfaceIndex
+        }
+        elseif ($null -ne $Plan.PSObject.Properties['InterfaceIndex']) {
+            $knownInterfaceIndex = $Plan.InterfaceIndex
+        }
+        return [pscustomobject]@{
+            Action = $Plan.Action
+            InterfaceIndex = $knownInterfaceIndex
+        }
     }
 
     if ($null -eq $Plan.PSObject.Properties['DestinationPrefix'] -or
@@ -173,6 +183,11 @@ function Set-RustDeskHostRoute {
     New-NetRoute -DestinationPrefix $Plan.DestinationPrefix `
         -InterfaceIndex $gatewayInterfaceIndex -NextHop $Plan.Gateway `
         -RouteMetric 5 -PolicyStore PersistentStore -ErrorAction Stop | Out-Null
+
+    [pscustomobject]@{
+        Action = $Plan.Action
+        InterfaceIndex = $gatewayInterfaceIndex
+    }
 }
 
 function Test-RustDeskPorts {

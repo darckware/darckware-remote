@@ -104,7 +104,9 @@ Describe 'Set-RustDeskHostRoute' {
             Confirmed = $true
         }
 
-        Set-RustDeskHostRoute -Plan $plan
+        $result = Set-RustDeskHostRoute -Plan $plan
+
+        $result.InterfaceIndex | Should -Be 11
 
         Should -Invoke Find-NetRoute -ModuleName Network -Times 1 -Exactly -ParameterFilter {
             $RemoteIPAddress -eq '192.168.1.10' -and $ErrorAction -eq 'Stop'
@@ -132,7 +134,9 @@ Describe 'Set-RustDeskHostRoute' {
             Confirmed = $true
         }
 
-        Set-RustDeskHostRoute -Plan $plan
+        $result = Set-RustDeskHostRoute -Plan $plan
+
+        $result.InterfaceIndex | Should -Be 7
 
         Should -Invoke Find-NetRoute -ModuleName Network -Times 0
         Should -Invoke Remove-NetRoute -ModuleName Network -Times 0
@@ -150,7 +154,9 @@ Describe 'Set-RustDeskHostRoute' {
             Confirmed = $true
         }
 
-        Set-RustDeskHostRoute -Plan $plan
+        $result = Set-RustDeskHostRoute -Plan $plan
+
+        $result.InterfaceIndex | Should -Be 11
 
         Should -Invoke Remove-NetRoute -ModuleName Network -Times 1 -Exactly -ParameterFilter {
             $DestinationPrefix -eq '100.105.235.114/32' -and

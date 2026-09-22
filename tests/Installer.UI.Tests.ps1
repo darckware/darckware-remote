@@ -32,7 +32,10 @@ Describe 'Get-WizardPageState' {
 Describe 'Show-InstallerWizard contract' {
     It 'exports the wizard and result interfaces' {
         Get-Command Show-InstallerWizard -Module Installer.UI | Should -Not -BeNullOrEmpty
+        Get-Command Show-InstallProgress -Module Installer.UI | Should -Not -BeNullOrEmpty
+        Get-Command Close-InstallProgress -Module Installer.UI | Should -Not -BeNullOrEmpty
         Get-Command Show-InstallResult -Module Installer.UI | Should -Not -BeNullOrEmpty
+        Get-Command Show-InstallFailure -Module Installer.UI | Should -Not -BeNullOrEmpty
     }
 
     It 'uses the Darckware Remoto product name and masks all secret fields' {
@@ -43,5 +46,7 @@ Describe 'Show-InstallerWizard contract' {
         $content | Should -Match 'Mostrar senha'
         $content | Should -Match '\$updateNext'
         $content | Should -Match '\$next\.Enabled'
+        $content | Should -Match 'ProgressBar'
+        $content | Should -Match 'troubleshooting\.md'
     }
 }

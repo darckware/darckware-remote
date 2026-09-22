@@ -236,8 +236,59 @@ function Show-InstallResult {
     [CmdletBinding()]
     param([Parameter(Mandatory)][pscustomobject]$Result)
     Add-Type -AssemblyName System.Windows.Forms
-    $message = "Instalação concluída.`r`n`r`nTailscale: $($Result.Tailscale.Connected)`r`nRustDesk ID: $($Result.RustDesk.Id)`r`nRede: $($Result.Network.Mode)`r`nLog: $($Result.LogPath)"
+    $portSummary = @($Result.Network.PortChecks | ForEach-Object { "TCP $($_.Port): $(if ($_.Reachable) { 'OK' } else { 'falha' })" }) -join ', '
+    if ([string]::IsNullOrEmpty($portSummary)) { $portSummary = 'não aplicável' }
+    $message = "Instalação concluída.`r`n`r`nTailscale conectado: $($Result.Tailscale.Connected)`r`nRustDesk ID: $($Result.RustDesk.Id)`r`nRede: $($Result.Network.Mode)`r`nConectividade: $portSummary`r`nLog: $($Result.LogPath)`r`n`r`nAjuda: docs\troubleshooting.md"
     [System.Windows.Forms.MessageBox]::Show($message, 'Darckware Remoto — Resultado', 'OK', 'Information') | Out-Null
 }
 
-Export-ModuleMember -Function Get-WizardPageState, Show-InstallerWizard, Show-InstallResult
+function Show-InstallProgress {
+    [CmdletBinding()]
+    [OutputType([System.Windows.Forms.Form])]
+    param()
+
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    $form = [System.Windows.Forms.Form]::new()
+    $form.Text = 'Darckware Remoto — Instalando'
+    $form.ClientSize = [System.Drawing.Size]::new(520, 190)
+    $form.StartPosition = 'CenterScreen'
+    $form.FormBorderStyle = 'FixedDialog'
+    $form.ControlBox = $false
+    $form.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#0B0D10')
+    $title = New-DarckwareLabel 'Preparando o acesso remoto' 18 Bold
+    $title.Location = [System.Drawing.Point]::new(34, 32)
+    $detail = New-DarckwareLabel 'Validando, instalando e configurando os componentes selecionados…' 10
+    $detail.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#7C8794')
+    $detail.Location = [System.Drawing.Point]::new(36, 78)
+    $progress = [System.Windows.Forms.ProgressBar]::new()
+    $progress.Location = [System.Drawing.Point]::new(38, 124)
+    $progress.Size = [System.Drawing.Size]::new(444, 12)
+    $progress.Style = 'Marquee'
+    $progress.MarqueeAnimationSpeed = 28
+    $form.Controls.AddRange(@($title, $detail, $progress))
+    $form.Show()
+    [System.Windows.Forms.Application]::DoEvents()
+    return $form
+}
+
+function Close-InstallProgress {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][System.Windows.Forms.Form]$Form)
+    if (-not $Form.IsDisposed) { $Form.Close(); $Form.Dispose() }
+}
+
+function Show-InstallFailure {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Message)
+    Add-Type -AssemblyName System.Windows.Forms
+    $safeMessage = if ([string]::IsNullOrWhiteSpace($Message)) { 'A instalação não pôde ser concluída.' } else { $Message }
+    [System.Windows.Forms.MessageBox]::Show(
+        "A instalação não pôde ser concluída.`r`n`r`n$safeMessage`r`n`r`nConsulte docs\troubleshooting.md e o log em %ProgramData%\Darckware\RustDeskInstaller\installer.log.",
+        'Darckware Remoto — Falha',
+        'OK',
+        'Error'
+    ) | Out-Null
+}
+
+Export-ModuleMember -Function Get-WizardPageState, Show-InstallerWizard, Show-InstallProgress, Close-InstallProgress, Show-InstallResult, Show-InstallFailure

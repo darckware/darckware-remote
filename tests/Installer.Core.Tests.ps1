@@ -112,7 +112,7 @@ Describe 'Invoke-DarckwareInstall ordering and secrecy' {
     }
 
     It 'redacts secret-shaped exception text in both the log and rethrown error' {
-        Mock Invoke-TailscaleStage -ModuleName Installer.Core { throw 'bad tskey-auth-never-log-this' }
+        Mock Invoke-TailscaleStage -ModuleName Installer.Core { throw ('bad tskey-' + 'auth-never-log-this') }
         $request = New-CoreRequest
         $message = $null
 
@@ -122,6 +122,29 @@ Describe 'Invoke-DarckwareInstall ordering and secrecy' {
         $message | Should -Match '\[REDACTED\]'
         $message | Should -Not -Match 'tskey-'
         (Get-Content -LiteralPath (Join-Path $TestDrive 'installer.log') -Raw) | Should -Not -Match 'tskey-'
+    }
+}
+
+Describe 'Tailscale stage idempotency' {
+    It 'reuses an already connected client without downloading or reinstalling it' {
+        Mock Get-TailscaleStatus -ModuleName Installer.Core {
+            [pscustomobject]@{ Connected = $true; BackendState = 'Running'; TailscaleIPs = @('100.64.1.2') }
+        }
+        Mock Get-VerifiedArtifact -ModuleName Installer.Core {}
+        Mock Install-Tailscale -ModuleName Installer.Core {}
+        Mock Connect-Tailscale -ModuleName Installer.Core {}
+        $request = New-CoreRequest
+        $config = New-CoreTestConfig $TestDrive
+
+        $result = InModuleScope Installer.Core -Parameters @{ Request = $request; Config = $config; StateRoot = $TestDrive } {
+            Invoke-TailscaleStage -Request $Request -Config $Config -StateRoot $StateRoot
+        }
+
+        $result.Connected | Should -BeTrue
+        $result.Reused | Should -BeTrue
+        Should -Invoke Get-VerifiedArtifact -ModuleName Installer.Core -Times 0
+        Should -Invoke Install-Tailscale -ModuleName Installer.Core -Times 0
+        Should -Invoke Connect-Tailscale -ModuleName Installer.Core -Times 0
     }
 }
 
@@ -169,6 +192,7 @@ Describe 'router connectivity decisions' {
             $DestinationPrefix -eq '100.105.235.114/32' -and $NextHop -eq '192.168.1.9' -and
             $InterfaceIndex -eq 7 -and $PolicyStore -eq 'PersistentStore' -and $Confirm -eq $false
         }
+        Should -Invoke Test-RustDeskPorts -ModuleName Installer.Core -Times 1
     }
 
     It 'refuses an unmanaged route conflict without mutating routes' {
@@ -232,5 +256,54 @@ Describe 'router connectivity decisions' {
             $Address -eq '100.105.235.114' -and $Ports.Count -eq 2 -and
             $Ports[0] -eq 21116 -and $Ports[1] -eq 21117
         }
+    }
+
+    It 'does not claim ownership of a matching route created outside the installer' {
+        Mock Get-RustDeskRoutePlan -ModuleName Installer.Core {
+            [pscustomobject]@{
+                Action = 'Reuse'; DestinationPrefix = '100.105.235.114/32'; Gateway = '192.168.1.10'
+                ManagedGateway = ''; ExistingInterfaceIndex = 7; RequiresConfirmation = $false; Confirmed = $false
+            }
+        }
+        $request = New-CoreRequest
+        $request.InstallTailscale = $false
+        $request.ConnectivityMode = 'Router'
+        $request.RouterIp = '192.168.1.10'
+        $config = New-CoreTestConfig $TestDrive
+
+        $result = InModuleScope Installer.Core -Parameters @{ Request = $request; Config = $config } {
+            Invoke-ConnectivityStage -Request $Request -Config $Config -State @{}
+        }
+
+        $result.RouteAction | Should -Be 'Reuse'
+        $result.ManagedByInstaller | Should -BeFalse
+    }
+
+    It 'records a newly created route before a later connectivity check fails' {
+        Mock Get-InstallerConfig -ModuleName Installer.Core { New-CoreTestConfig $TestDrive }
+        Mock Invoke-RustDeskStage -ModuleName Installer.Core {}
+        Mock Get-NetRoute -ModuleName Installer.Core { @() }
+        Mock Get-RustDeskRoutePlan -ModuleName Installer.Core {
+            [pscustomobject]@{
+                Action = 'Create'; DestinationPrefix = '100.105.235.114/32'; Gateway = '192.168.1.10'
+                ManagedGateway = ''; ExistingInterfaceIndex = $null; RequiresConfirmation = $false; Confirmed = $false
+            }
+        }
+        Mock Set-RustDeskHostRoute -ModuleName Installer.Core {
+            [pscustomobject]@{ InterfaceIndex = 11 }
+        }
+        Mock Test-RustDeskPorts -ModuleName Installer.Core {
+            @([pscustomobject]@{ Port = 21116; Reachable = $false })
+        }
+        $request = New-CoreRequest
+        $request.InstallTailscale = $false
+        $request.ConnectivityMode = 'Router'
+        $request.RouterIp = '192.168.1.10'
+
+        { Invoke-DarckwareInstall -Request $request -RepoRoot $TestDrive } | Should -Throw '*not reachable*'
+
+        $state = Get-Content -LiteralPath (Join-Path $TestDrive 'state.json') -Raw | ConvertFrom-Json
+        $state.ManagedRouteGateway | Should -Be '192.168.1.10'
+        $state.ManagedRouteInterfaceIndex | Should -Be 11
     }
 }

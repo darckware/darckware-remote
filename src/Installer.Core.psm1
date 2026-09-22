@@ -97,7 +97,7 @@ function Read-InstallerState {
 }
 
 function Save-InstallerState {
-    param([string]$Path, $Config, $Network)
+    param([string]$Path, $Config, $Network, $PreviousState)
 
     $state = [ordered]@{
         ComponentVersions = [ordered]@{
@@ -106,15 +106,43 @@ function Save-InstallerState {
         }
         UpdatedAt = [DateTime]::UtcNow.ToString('o')
     }
-    if ($Network.Mode -eq 'Router' -and $Network.RouteAction -in @('Create', 'Reuse', 'Replace')) {
+    if ($Network.Mode -eq 'Router' -and [bool](Get-ObjectValue $Network 'ManagedByInstaller' $false)) {
         $state.ManagedRouteDestination = [string]$Config.Deployment.route.destinationPrefix
         $state.ManagedRouteGateway = [string]$Network.Gateway
+        $state.ManagedRouteInterfaceIndex = [int](Get-ObjectValue $Network 'InterfaceIndex' 0)
+    }
+    elseif ($Network.Mode -eq 'None') {
+        $previousDestination = [string](Get-ObjectValue $PreviousState 'ManagedRouteDestination' '')
+        $previousGateway = [string](Get-ObjectValue $PreviousState 'ManagedRouteGateway' '')
+        $previousInterface = [int](Get-ObjectValue $PreviousState 'ManagedRouteInterfaceIndex' 0)
+        if ($previousDestination -ceq [string]$Config.Deployment.route.destinationPrefix -and
+            (Test-IPv4Address -Address $previousGateway)) {
+            $state.ManagedRouteDestination = $previousDestination
+            $state.ManagedRouteGateway = $previousGateway
+            if ($previousInterface -gt 0) { $state.ManagedRouteInterfaceIndex = $previousInterface }
+        }
     }
     $state | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Path -Encoding UTF8
 }
 
 function Invoke-TailscaleStage {
     param($Request, $Config, [string]$StateRoot)
+
+    try {
+        $existingStatus = Get-TailscaleStatus
+        if ($existingStatus.Connected) {
+            return [pscustomobject]@{
+                Requested = $true
+                Installed = $true
+                Connected = $true
+                Reused = $true
+                RebootRequired = $false
+            }
+        }
+    }
+    catch {
+        # A missing or not-yet-functional client is handled by the verified installation below.
+    }
 
     $artifact = Get-VerifiedArtifact -Artifact $Config.Artifacts.tailscale -CacheRoot (Join-Path $StateRoot 'downloads')
     $installation = Install-Tailscale -MsiPath $artifact
@@ -123,6 +151,7 @@ function Invoke-TailscaleStage {
         Requested = $true
         Installed = $true
         Connected = [bool]$status.Connected
+        Reused = $false
         RebootRequired = [bool]$installation.RebootRequired
     }
 }
@@ -132,6 +161,7 @@ function Remove-ManagedHostRoute {
 
     $destination = [string](Get-ObjectValue $State 'ManagedRouteDestination' '')
     $gateway = [string](Get-ObjectValue $State 'ManagedRouteGateway' '')
+    $interfaceIndex = [int](Get-ObjectValue $State 'ManagedRouteInterfaceIndex' 0)
     $configuredDestination = [string]$Config.Deployment.route.destinationPrefix
     if ([string]::IsNullOrEmpty($destination) -or [string]::IsNullOrEmpty($gateway)) { return }
     if ($destination -cne $configuredDestination -or -not (Test-IPv4Address -Address $gateway)) {
@@ -139,8 +169,12 @@ function Remove-ManagedHostRoute {
     }
 
     $managedRoutes = @(Get-NetRoute -DestinationPrefix $destination -ErrorAction SilentlyContinue | Where-Object {
-        $_.DestinationPrefix -ceq $destination -and $_.NextHop -ceq $gateway
+        $_.DestinationPrefix -ceq $destination -and $_.NextHop -ceq $gateway -and
+        ($interfaceIndex -le 0 -or $_.InterfaceIndex -eq $interfaceIndex)
     })
+    if ($interfaceIndex -le 0 -and $managedRoutes.Count -gt 1) {
+        throw 'Saved managed route is ambiguous and will not be removed.'
+    }
     foreach ($route in $managedRoutes) {
         Remove-NetRoute -DestinationPrefix $destination -NextHop $gateway `
             -InterfaceIndex $route.InterfaceIndex -PolicyStore PersistentStore `
@@ -149,16 +183,25 @@ function Remove-ManagedHostRoute {
 }
 
 function Invoke-ConnectivityStage {
-    param($Request, $Config, $State)
+    param($Request, $Config, $State, [string]$StatePath = '')
 
     if (-not $Request.InstallRustDesk) {
-        return [pscustomobject]@{ Mode = 'None'; RouteAction = 'None'; PortChecks = @() }
+        return [pscustomobject]@{ Mode = 'None'; RouteAction = 'None'; ManagedByInstaller = $false; PortChecks = @() }
     }
     if ($Request.ConnectivityMode -eq 'LocalTailscale') {
         $status = Get-TailscaleStatus
         if (-not $status.Connected) { throw 'Local Tailscale is not connected.' }
         Remove-ManagedHostRoute -State $State -Config $Config
-        return [pscustomobject]@{ Mode = 'LocalTailscale'; RouteAction = 'None'; PortChecks = @() }
+        $network = [pscustomobject]@{ Mode = 'LocalTailscale'; RouteAction = 'None'; ManagedByInstaller = $false; PortChecks = @() }
+        if (-not [string]::IsNullOrEmpty($StatePath)) {
+            Save-InstallerState -Path $StatePath -Config $Config -Network $network -PreviousState $State
+        }
+        $checks = @(Test-RustDeskPorts -Address $Config.Deployment.rustdesk.idServer -Ports $Config.Deployment.rustdesk.tcpPorts)
+        if (@($checks | Where-Object { -not $_.Reachable }).Count -gt 0) {
+            throw 'RustDesk server ports are not reachable through local Tailscale.'
+        }
+        $network.PortChecks = $checks
+        return $network
     }
 
     $destination = [string]$Config.Deployment.route.destinationPrefix
@@ -171,18 +214,30 @@ function Invoke-ConnectivityStage {
         if (-not $Request.ConfirmRouteReplacement) { throw 'Route replacement requires confirmation.' }
         $plan.Confirmed = $true
     }
-    Set-RustDeskHostRoute -Plan $plan
+    $routeResult = Set-RustDeskHostRoute -Plan $plan
+    $managedByInstaller = ($plan.Action -in @('Create', 'Replace')) -or (
+        $plan.Action -eq 'Reuse' -and
+        [string](Get-ObjectValue $State 'ManagedRouteDestination' '') -ceq $destination -and
+        $managedGateway -ceq [string]$Request.RouterIp
+    )
+    $network = [pscustomobject]@{
+        Mode = 'Router'
+        RouteAction = [string]$plan.Action
+        ManagedByInstaller = $managedByInstaller
+        Gateway = [string]$Request.RouterIp
+        InterfaceIndex = [int](Get-ObjectValue $routeResult 'InterfaceIndex' (Get-ObjectValue $plan 'ExistingInterfaceIndex' 0))
+        PortChecks = @()
+    }
+    if ($managedByInstaller -and -not [string]::IsNullOrEmpty($StatePath)) {
+        Save-InstallerState -Path $StatePath -Config $Config -Network $network -PreviousState $State
+    }
 
     $checks = @(Test-RustDeskPorts -Address $Config.Deployment.rustdesk.idServer -Ports $Config.Deployment.rustdesk.tcpPorts)
     if (@($checks | Where-Object { -not $_.Reachable }).Count -gt 0) {
         throw 'RustDesk server ports are not reachable through the router.'
     }
-    [pscustomobject]@{
-        Mode = 'Router'
-        RouteAction = [string]$plan.Action
-        Gateway = [string]$Request.RouterIp
-        PortChecks = $checks
-    }
+    $network.PortChecks = $checks
+    return $network
 }
 
 function Invoke-RustDeskStage {
@@ -226,13 +281,13 @@ function Invoke-DarckwareInstall {
             $tailscale = Invoke-TailscaleStage -Request $effectiveRequest -Config $config -StateRoot $stateRoot
         }
 
-        $network = Invoke-ConnectivityStage -Request $effectiveRequest -Config $config -State $state
+        $network = Invoke-ConnectivityStage -Request $effectiveRequest -Config $config -State $state -StatePath $statePath
         $rustDesk = [pscustomobject]@{ Requested = $false; Installed = $false; Configured = $false; Id = '' }
         if ($effectiveRequest.InstallRustDesk) {
             $rustDesk = Invoke-RustDeskStage -Request $effectiveRequest -Config $config -StateRoot $stateRoot
         }
 
-        Save-InstallerState -Path $statePath -Config $config -Network $network
+        Save-InstallerState -Path $statePath -Config $config -Network $network -PreviousState $state
         Write-InstallerLog -Path $logPath -Text 'Installation completed.'
         [pscustomobject]@{
             Success = $true

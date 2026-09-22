@@ -14,6 +14,12 @@ Describe 'install.ps1 contract' {
         $script:Content | Should -Match '1223'
     }
 
+    It 'shows and always closes progress for interactive installation' {
+        $script:Content | Should -Match 'Show-InstallProgress'
+        $script:Content | Should -Match 'finally\s*\{[\s\S]*Close-InstallProgress'
+        $script:Content | Should -Match 'Show-InstallFailure'
+    }
+
     It 'reads secret files into SecureString values and removes no caller-owned file' {
         $script:Content | Should -Match 'ConvertTo-SecureString'
         $script:Content | Should -Match 'TrimEnd\(\[char\[\]\]'

@@ -81,12 +81,22 @@ try {
 
     try { Test-InstallRequest -Request $request }
     catch { [Console]::Error.WriteLine((Protect-LogText $_.Exception.Message)); exit 2 }
-    $result = Invoke-DarckwareInstall -Request $request -RepoRoot $PSScriptRoot
+    $progressForm = $null
+    if (-not $NonInteractive) { $progressForm = Show-InstallProgress }
+    try {
+        $result = Invoke-DarckwareInstall -Request $request -RepoRoot $PSScriptRoot
+    }
+    finally {
+        if ($null -ne $progressForm) { Close-InstallProgress -Form $progressForm }
+    }
     if (-not $NonInteractive) { Show-InstallResult -Result $result }
     exit 0
 }
 catch {
     $safe = Protect-LogText $_.Exception.Message
+    if (-not $NonInteractive -and $null -ne (Get-Command Show-InstallFailure -ErrorAction SilentlyContinue)) {
+        Show-InstallFailure -Message $safe
+    }
     [Console]::Error.WriteLine($safe)
     exit 1
 }
