@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="assets/darckware-lockup-light.svg" alt="Darckware" width="430">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/darckware-lockup-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/darckware-lockup-light.svg">
+    <img src="assets/darckware-lockup-light.svg" alt="Darckware" width="430">
+  </picture>
 </p>
 
 # Darckware Remoto
