@@ -7,15 +7,29 @@ Describe 'Protect-LogText' {
         $safe | Should -Not -Match 'tskey-|SuperSecret|OtherSecret'
         $safe | Should -Match '\[REDACTED\]'
     }
+
+    It 'redacts quoted named values that contain spaces' {
+        $text = "password=`"Super Secret Value`" authkey='Another Hidden Value' rustdeskPassword=UnquotedSecret"
+        $safe = Protect-LogText -Text $text
+        $safe | Should -Not -Match 'Super|Secret|Value|Another|Hidden|UnquotedSecret'
+        $safe | Should -Match 'password=\[REDACTED\].*authkey=\[REDACTED\].*rustdeskPassword=\[REDACTED\]'
+    }
 }
 
 Describe 'protected secret files' {
     It 'writes the secret and removes it deterministically' {
         $secret = ConvertTo-SecureString 'tskey-auth-test' -AsPlainText -Force
-        $path = New-ProtectedSecretFile -Secret $secret -Directory $TestDrive
-        Test-Path $path | Should -BeTrue
-        Get-Content -Raw $path | Should -Be 'tskey-auth-test'
-        Remove-SecretFile -Path $path
+        $path = $null
+        try {
+            $path = New-ProtectedSecretFile -Secret $secret -Directory $TestDrive
+            Test-Path $path | Should -BeTrue
+            Get-Content -Raw $path | Should -Be 'tskey-auth-test'
+        }
+        finally {
+            if ($path) {
+                Remove-SecretFile -Path $path
+            }
+        }
         Test-Path $path | Should -BeFalse
     }
 

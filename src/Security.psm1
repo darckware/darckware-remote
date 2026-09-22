@@ -3,7 +3,7 @@ function Protect-LogText {
     param([AllowEmptyString()][string]$Text)
 
     $safe = $Text -replace 'tskey-[A-Za-z0-9_-]+', '[REDACTED]'
-    $safe = $safe -replace '(?i)(password|authkey|rustdeskPassword)\s*[=:]\s*\S+', '$1=[REDACTED]'
+    $safe = $safe -replace '(?i)(password|authkey|rustdeskPassword)\s*[=:]\s*(?:"[^"]*"|''[^'']*''|\S+)', '$1=[REDACTED]'
     return $safe
 }
 
@@ -40,10 +40,11 @@ function New-ProtectedSecretFile {
     $bstr = [IntPtr]::Zero
 
     try {
+        New-Item -ItemType File -Path $path -ErrorAction Stop | Out-Null
+        Set-SecretFileAcl -Path $path
         $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Secret)
         $plainText = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
         [System.IO.File]::WriteAllText($path, $plainText, [System.Text.UTF8Encoding]::new($false))
-        Set-SecretFileAcl -Path $path
         return $path
     }
     catch {
