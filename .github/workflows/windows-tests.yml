@@ -22,4 +22,7 @@ jobs:
         shell: powershell
         run: |
           $matches = @(git grep -n -E 'tskey-(auth|client)-[A-Za-z0-9_-]{10,}' -- . ':(exclude)docs/superpowers/plans/*')
+          $grepExitCode = $LASTEXITCODE
+          if ($grepExitCode -gt 1) { Write-Error "git grep failed with exit code $grepExitCode"; exit $grepExitCode }
           if ($matches.Count -gt 0) { $matches | Write-Error; exit 1 }
+          exit 0
