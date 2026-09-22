@@ -1,1 +1,7 @@
 .worktrees/
+downloads/
+*.log
+TestResults/
+secrets/
+state/
+*.local.json

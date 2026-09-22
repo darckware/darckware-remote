@@ -1,0 +1,12 @@
+{
+  "rustdesk": {
+    "idServer": "100.105.235.114",
+    "relayServer": "100.105.235.114:21117",
+    "publicKey": "30OQH25Eg+VmQH06Y6h7GXiuHML4V8Km4MltPVfP4ys=",
+    "tcpPorts": [21116, 21117]
+  },
+  "route": {
+    "destinationPrefix": "100.105.235.114/32"
+  },
+  "stateRoot": "%ProgramData%\\Darckware\\RustDeskInstaller"
+}

@@ -1,0 +1,44 @@
+BeforeAll {
+    Import-Module "$PSScriptRoot/../src/Artifact.psm1" -Force
+    $repo = (Resolve-Path "$PSScriptRoot/..").Path
+}
+
+Describe 'Get-InstallerConfig' {
+    It 'loads exact pinned versions and deployment values' {
+        $config = Get-InstallerConfig -RepoRoot $repo
+        $config.Artifacts.rustdesk.version | Should -Be '1.4.9'
+        $config.Artifacts.tailscale.version | Should -Be '1.102.3'
+        $config.Deployment.rustdesk.idServer | Should -Be '100.105.235.114'
+        $config.Deployment.route.destinationPrefix | Should -Be '100.105.235.114/32'
+    }
+
+    It 'contains only HTTPS artifact URLs and 64-character hashes' {
+        $config = Get-InstallerConfig -RepoRoot $repo
+        foreach ($artifact in @($config.Artifacts.rustdesk, $config.Artifacts.tailscale)) {
+            $artifact.url | Should -Match '^https://'
+            $artifact.sha256 | Should -Match '^[a-f0-9]{64}$'
+        }
+    }
+}
+
+Describe 'Get-VerifiedArtifact' {
+    It 'rejects a checksum mismatch before signature verification' {
+        Mock Invoke-WebRequest { Set-Content -LiteralPath $OutFile -Value 'tampered' -NoNewline }
+        Mock Get-AuthenticodeSignature { throw 'signature check must not run' }
+        $artifact = [pscustomobject]@{ name='x'; fileName='x.exe'; url='https://example.test/x.exe'; sha256=('0' * 64); publisher='Example' }
+        { Get-VerifiedArtifact -Artifact $artifact -CacheRoot $TestDrive } | Should -Throw '*SHA-256*'
+        Should -Invoke Get-AuthenticodeSignature -Times 0
+    }
+
+    It 'rejects invalid signatures and unexpected publishers' {
+        # Use a fixture hash for the bytes emitted by the download mock.
+        $bytes = [Text.Encoding]::UTF8.GetBytes('signed-fixture')
+        $hash = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
+        Mock Invoke-WebRequest { [IO.File]::WriteAllBytes($OutFile, $bytes) }
+        $artifact = [pscustomobject]@{ name='x'; fileName='x.exe'; url='https://example.test/x.exe'; sha256=$hash; publisher='Expected Publisher' }
+        Mock Get-AuthenticodeSignature { [pscustomobject]@{ Status='NotSigned'; SignerCertificate=$null } }
+        { Get-VerifiedArtifact -Artifact $artifact -CacheRoot $TestDrive } | Should -Throw '*Authenticode*'
+        Mock Get-AuthenticodeSignature { [pscustomobject]@{ Status='Valid'; SignerCertificate=[pscustomobject]@{ Subject='CN=Wrong Publisher' } } }
+        { Get-VerifiedArtifact -Artifact $artifact -CacheRoot $TestDrive } | Should -Throw '*publisher*'
+    }
+}

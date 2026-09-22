@@ -1,0 +1,18 @@
+{
+  "rustdesk": {
+    "name": "RustDesk",
+    "version": "1.4.9",
+    "fileName": "rustdesk-1.4.9-x86_64.exe",
+    "url": "https://github.com/rustdesk/rustdesk/releases/download/1.4.9/rustdesk-1.4.9-x86_64.exe",
+    "sha256": "eaedeb0088e687bf46f7c46a9c6ea5493ce51f3134dfd6acbedb47b5b9136274",
+    "publisher": "PURSLANE"
+  },
+  "tailscale": {
+    "name": "Tailscale",
+    "version": "1.102.3",
+    "fileName": "tailscale-setup-1.102.3-amd64.msi",
+    "url": "https://pkgs.tailscale.com/stable/tailscale-setup-1.102.3-amd64.msi",
+    "sha256": "03ac8183c6e3ce276e9b44281ebe7e4c02aef28a971034ca170c4b665df42dce",
+    "publisher": "Tailscale Inc."
+  }
+}
