@@ -33,7 +33,6 @@ function New-DarckwareLabel {
 
 function New-DarckwareBrandImage {
     [CmdletBinding()]
-    [OutputType([System.Windows.Forms.PictureBox])]
     param([Parameter(Mandatory)][string]$AssetRoot)
 
     Add-Type -AssemblyName System.Windows.Forms

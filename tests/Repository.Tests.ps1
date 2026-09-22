@@ -18,9 +18,9 @@ Describe 'public repository contract' {
 
     It 'documents the exact primary installation workflow' {
         $readme = Get-Content (Join-Path $script:RepoRoot 'README.md') -Raw
-        $readme | Should -Match [regex]::Escape('git clone https://github.com/marcelodarckferreira/rustdesk-darckware.git')
-        $readme | Should -Match [regex]::Escape('cd rustdesk-darckware')
-        $readme | Should -Match [regex]::Escape('.\install.cmd')
+        $readme | Should -Match ([regex]::Escape('git clone https://github.com/marcelodarckferreira/rustdesk-darckware.git'))
+        $readme | Should -Match ([regex]::Escape('cd rustdesk-darckware'))
+        $readme | Should -Match ([regex]::Escape('.\install.cmd'))
     }
 
     It 'pins Windows CI to Pester 5.7.1 and runs the complete suite' {
