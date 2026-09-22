@@ -23,22 +23,22 @@ Describe 'Get-InstallerConfig' {
 
 Describe 'Get-VerifiedArtifact' {
     It 'rejects a checksum mismatch before signature verification' {
-        Mock Invoke-WebRequest { Set-Content -LiteralPath $OutFile -Value 'tampered' -NoNewline }
-        Mock Get-AuthenticodeSignature { throw 'signature check must not run' }
+        Mock Invoke-WebRequest -ModuleName Artifact { Set-Content -LiteralPath $OutFile -Value 'tampered' -NoNewline }
+        Mock Get-AuthenticodeSignature -ModuleName Artifact { throw 'signature check must not run' }
         $artifact = [pscustomobject]@{ name='x'; fileName='x.exe'; url='https://example.test/x.exe'; sha256=('0' * 64); publisher='Example' }
         { Get-VerifiedArtifact -Artifact $artifact -CacheRoot $TestDrive } | Should -Throw '*SHA-256*'
-        Should -Invoke Get-AuthenticodeSignature -Times 0
+        Should -Invoke Get-AuthenticodeSignature -ModuleName Artifact -Times 0
     }
 
     It 'rejects invalid signatures and unexpected publishers' {
         # Use a fixture hash for the bytes emitted by the download mock.
         $bytes = [Text.Encoding]::UTF8.GetBytes('signed-fixture')
         $hash = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
-        Mock Invoke-WebRequest { [IO.File]::WriteAllBytes($OutFile, $bytes) }
+        Mock Invoke-WebRequest -ModuleName Artifact { [IO.File]::WriteAllBytes($OutFile, $bytes) }
         $artifact = [pscustomobject]@{ name='x'; fileName='x.exe'; url='https://example.test/x.exe'; sha256=$hash; publisher='Expected Publisher' }
-        Mock Get-AuthenticodeSignature { [pscustomobject]@{ Status='NotSigned'; SignerCertificate=$null } }
+        Mock Get-AuthenticodeSignature -ModuleName Artifact { [pscustomobject]@{ Status='NotSigned'; SignerCertificate=$null } }
         { Get-VerifiedArtifact -Artifact $artifact -CacheRoot $TestDrive } | Should -Throw '*Authenticode*'
-        Mock Get-AuthenticodeSignature { [pscustomobject]@{ Status='Valid'; SignerCertificate=[pscustomobject]@{ Subject='CN=Wrong Publisher' } } }
+        Mock Get-AuthenticodeSignature -ModuleName Artifact { [pscustomobject]@{ Status='Valid'; SignerCertificate=[pscustomobject]@{ Subject='CN=Wrong Publisher' } } }
         { Get-VerifiedArtifact -Artifact $artifact -CacheRoot $TestDrive } | Should -Throw '*publisher*'
     }
 }
