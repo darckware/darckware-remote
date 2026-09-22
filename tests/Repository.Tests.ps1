@@ -9,7 +9,8 @@ Describe 'public repository contract' {
             'docs/router-prerequisites.md',
             'docs/troubleshooting.md',
             '.github/workflows/windows-tests.yml',
-            'assets/darckware-icon-512.png'
+            'assets/darckware-icon-512.png',
+            'assets/darckware-lockup-dark.png'
         ) | ForEach-Object {
             Test-Path (Join-Path $script:RepoRoot $_) | Should -BeTrue -Because "$_ is part of the public release"
         }

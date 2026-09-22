@@ -92,7 +92,7 @@ Every input has a visible label. Auth keys and passwords are masked by default a
 
 ### Iconography
 
-Only approved Darckware assets and Windows system glyphs are used. Icons never replace required action labels.
+Only approved Darckware assets and Windows system glyphs are used. The wizard rail uses a PNG rasterization of the exact `lockup-dark.svg` published by `darckware.net`, because WinForms does not render SVG natively; the source SVG remains unchanged and authoritative. Icons never replace required action labels.
 
 ### Motion
 

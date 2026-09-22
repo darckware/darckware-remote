@@ -29,6 +29,24 @@ Describe 'Get-WizardPageState' {
     }
 }
 
+Describe 'New-DarckwareBrandImage' {
+    It 'loads the official site lockup into a proportionally scaled image control' {
+        $assetRoot = Join-Path $PSScriptRoot '../assets'
+        $control = New-DarckwareBrandImage -AssetRoot $assetRoot
+        try {
+            $control.Image | Should -Not -BeNullOrEmpty
+            $control.SizeMode | Should -Be ([System.Windows.Forms.PictureBoxSizeMode]::Zoom)
+            $control.AccessibleName | Should -Be 'Darckware'
+            $control.Image.Width | Should -Be 986
+            $control.Image.Height | Should -Be 274
+        }
+        finally {
+            if ($null -ne $control.Image) { $control.Image.Dispose() }
+            $control.Dispose()
+        }
+    }
+}
+
 Describe 'Show-InstallerWizard contract' {
     It 'exports the wizard and result interfaces' {
         Get-Command Show-InstallerWizard -Module Installer.UI | Should -Not -BeNullOrEmpty

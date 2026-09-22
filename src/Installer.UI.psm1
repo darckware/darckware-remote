@@ -31,6 +31,35 @@ function New-DarckwareLabel {
     return $label
 }
 
+function New-DarckwareBrandImage {
+    [CmdletBinding()]
+    [OutputType([System.Windows.Forms.PictureBox])]
+    param([Parameter(Mandatory)][string]$AssetRoot)
+
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    $assetPath = Join-Path $AssetRoot 'darckware-lockup-dark.png'
+    if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
+        throw "Official Darckware lockup not found: $assetPath"
+    }
+
+    $stream = [System.IO.File]::OpenRead($assetPath)
+    try {
+        $source = [System.Drawing.Image]::FromStream($stream)
+        try { $image = [System.Drawing.Bitmap]::new($source) }
+        finally { $source.Dispose() }
+    }
+    finally {
+        $stream.Dispose()
+    }
+
+    $picture = [System.Windows.Forms.PictureBox]::new()
+    $picture.Image = $image
+    $picture.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::Zoom
+    $picture.AccessibleName = 'Darckware'
+    return $picture
+}
+
 function Show-InstallerWizard {
     [CmdletBinding()]
     [OutputType([pscustomobject])]
@@ -67,8 +96,12 @@ function Show-InstallerWizard {
     $rail = [System.Windows.Forms.Panel]::new()
     $rail.Dock = 'Left'; $rail.Width = 220; $rail.BackColor = $surface
     $form.Controls.Add($rail)
-    $brand = New-DarckwareLabel -Text '</d>  darckware' -Size 16 -Style Bold
-    $brand.Location = [System.Drawing.Point]::new(24, 28); $rail.Controls.Add($brand)
+    $assetRoot = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets'
+    $brand = New-DarckwareBrandImage -AssetRoot $assetRoot
+    $brand.Location = [System.Drawing.Point]::new(18, 22)
+    $brand.Size = [System.Drawing.Size]::new(184, 51)
+    $brand.BackColor = $surface
+    $rail.Controls.Add($brand)
     $steps = @('1  Componentes', '2  Conectividade', '3  Acesso', '4  Revisão')
     $stepLabels = @()
     for ($i = 0; $i -lt $steps.Count; $i++) {
@@ -229,7 +262,11 @@ function Show-InstallerWizard {
     })
 
     try { if ($form.ShowDialog() -eq 'OK') { return $request }; return $null }
-    finally { $authBox.Clear(); $passwordBox.Clear(); $confirmBox.Clear(); $form.Dispose() }
+    finally {
+        $authBox.Clear(); $passwordBox.Clear(); $confirmBox.Clear()
+        if ($null -ne $brand.Image) { $brand.Image.Dispose() }
+        $form.Dispose()
+    }
 }
 
 function Show-InstallResult {
@@ -291,4 +328,4 @@ function Show-InstallFailure {
     ) | Out-Null
 }
 
-Export-ModuleMember -Function Get-WizardPageState, Show-InstallerWizard, Show-InstallProgress, Close-InstallProgress, Show-InstallResult, Show-InstallFailure
+Export-ModuleMember -Function Get-WizardPageState, New-DarckwareBrandImage, Show-InstallerWizard, Show-InstallProgress, Close-InstallProgress, Show-InstallResult, Show-InstallFailure
