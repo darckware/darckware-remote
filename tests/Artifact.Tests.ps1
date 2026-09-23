@@ -22,8 +22,23 @@ Describe 'Get-InstallerConfig' {
 }
 
 Describe 'Get-VerifiedArtifact' {
+    It 'reports download progress while writing the artifact' {
+        $progress = [Collections.Generic.List[object]]::new()
+        Mock Invoke-ArtifactDownload -ModuleName Artifact {
+            [IO.File]::WriteAllText($OutFile, 'fixture')
+            & $ProgressAction 7 7
+        }
+        Mock Get-FileHash -ModuleName Artifact { [pscustomobject]@{ Hash = $Artifact.sha256 } }
+        Mock Get-AuthenticodeSignature -ModuleName Artifact {
+            [pscustomobject]@{ Status = 'Valid'; SignerCertificate = [pscustomobject]@{ Subject = 'CN=Fixture' } }
+        }
+        $artifact = [pscustomobject]@{ fileName = 'fixture.exe'; url = 'https://example.test/fixture'; sha256 = ('a' * 64); publisher = 'Fixture' }
+        Get-VerifiedArtifact -Artifact $artifact -CacheRoot $TestDrive -ProgressAction { param($written, $total) $progress.Add([pscustomobject]@{ Written = $written; Total = $total }) } | Out-Null
+        $progress | Should -HaveCount 1
+        $progress[0].Written | Should -Be 7
+    }
     It 'rejects a checksum mismatch before signature verification' {
-        Mock Invoke-WebRequest -ModuleName Artifact { Set-Content -LiteralPath $OutFile -Value 'tampered' -NoNewline }
+        Mock Invoke-ArtifactDownload -ModuleName Artifact { Set-Content -LiteralPath $OutFile -Value 'tampered' -NoNewline }
         Mock Get-AuthenticodeSignature -ModuleName Artifact { throw 'signature check must not run' }
         $artifact = [pscustomobject]@{ name='x'; fileName='x.exe'; url='https://example.test/x.exe'; sha256=('0' * 64); publisher='Example' }
         { Get-VerifiedArtifact -Artifact $artifact -CacheRoot $TestDrive } | Should -Throw '*SHA-256*'
@@ -34,7 +49,7 @@ Describe 'Get-VerifiedArtifact' {
         # Use a fixture hash for the bytes emitted by the download mock.
         $bytes = [Text.Encoding]::UTF8.GetBytes('signed-fixture')
         $hash = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
-        Mock Invoke-WebRequest -ModuleName Artifact { [IO.File]::WriteAllBytes($OutFile, $bytes) }
+        Mock Invoke-ArtifactDownload -ModuleName Artifact { [IO.File]::WriteAllBytes($OutFile, $bytes) }
         $artifact = [pscustomobject]@{ name='x'; fileName='x.exe'; url='https://example.test/x.exe'; sha256=$hash; publisher='Expected Publisher' }
         Mock Get-AuthenticodeSignature -ModuleName Artifact { [pscustomobject]@{ Status='NotSigned'; SignerCertificate=$null } }
         { Get-VerifiedArtifact -Artifact $artifact -CacheRoot $TestDrive } | Should -Throw '*Authenticode*'

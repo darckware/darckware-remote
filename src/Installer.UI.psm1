@@ -301,8 +301,14 @@ function Show-InstallProgress {
     $progress = [System.Windows.Forms.ProgressBar]::new()
     $progress.Location = [System.Drawing.Point]::new(38, 124)
     $progress.Size = [System.Drawing.Size]::new(444, 12)
-    $progress.Style = 'Marquee'
-    $progress.MarqueeAnimationSpeed = 28
+    $progress.Style = 'Continuous'
+    $progress.Minimum = 0
+    $progress.Maximum = 100
+    $form | Add-Member ScriptMethod UpdateProgress {
+        param([int64]$Written, [int64]$Total)
+        if ($Total -gt 0) { $this.Controls[2].Value = [Math]::Min(100, [Math]::Max(0, [int](($Written * 100) / $Total))) }
+        [System.Windows.Forms.Application]::DoEvents()
+    }
     $form.Controls.AddRange(@($title, $detail, $progress))
     $form.Show()
     [System.Windows.Forms.Application]::DoEvents()

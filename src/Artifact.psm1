@@ -18,16 +18,33 @@ function Get-InstallerConfig {
     }
 }
 
+function Invoke-ArtifactDownload {
+    param([string]$Uri, [string]$OutFile, [scriptblock]$ProgressAction)
+    $client = [Net.WebClient]::new()
+    try {
+        if ($null -ne $ProgressAction) {
+            $client.add_DownloadProgressChanged({
+                param($sender, $event)
+                & $ProgressAction ([int64]$event.BytesReceived) ([int64]$event.TotalBytesToReceive)
+            })
+        }
+        $client.DownloadFile($Uri, $OutFile)
+        if ($null -ne $ProgressAction) { & $ProgressAction ([int64](Get-Item $OutFile).Length) ([int64](Get-Item $OutFile).Length) }
+    }
+    finally { $client.Dispose() }
+}
+
 function Get-VerifiedArtifact {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]$Artifact,
-        [Parameter(Mandatory)][string]$CacheRoot
+        [Parameter(Mandatory)][string]$CacheRoot,
+        [scriptblock]$ProgressAction
     )
 
     $target = Join-Path $CacheRoot $Artifact.fileName
     New-Item -ItemType Directory -Force $CacheRoot | Out-Null
-    Invoke-WebRequest -Uri $Artifact.url -OutFile $target -UseBasicParsing
+    Invoke-ArtifactDownload -Uri $Artifact.url -OutFile $target -ProgressAction $ProgressAction
     $actual = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $Artifact.sha256.ToLowerInvariant()) {
         Remove-Item $target -Force
