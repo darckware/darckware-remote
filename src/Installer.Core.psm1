@@ -283,6 +283,10 @@ function Invoke-DarckwareInstall {
         }
 
         $network = Invoke-ConnectivityStage -Request $effectiveRequest -Config $config -State $state -StatePath $statePath
+        if ($network.Mode -eq 'LocalTailscale') {
+            # Local Tailscale may be reused without being selected for installation.
+            $tailscale.Connected = $true
+        }
         $rustDesk = [pscustomobject]@{ Requested = $false; Installed = $false; Configured = $false; Id = '' }
         if ($effectiveRequest.InstallRustDesk) {
             $rustDesk = Invoke-RustDeskStage -Request $effectiveRequest -Config $config -StateRoot $stateRoot

@@ -148,6 +148,41 @@ Describe 'Tailscale stage idempotency' {
     }
 }
 
+Describe 'existing local Tailscale in the installation summary' {
+    BeforeEach {
+        $config = New-CoreTestConfig $TestDrive
+        Mock Get-InstallerConfig -ModuleName Installer.Core { $config }
+        Mock Get-TailscaleStatus -ModuleName Installer.Core {
+            [pscustomobject]@{ Connected = $true }
+        }
+        Mock Test-RustDeskPorts -ModuleName Installer.Core {
+            @([pscustomobject]@{ Port = 21116; Reachable = $true },
+              [pscustomobject]@{ Port = 21117; Reachable = $true })
+        }
+        Mock Invoke-RustDeskStage -ModuleName Installer.Core {
+            [pscustomobject]@{ Requested = $true; Installed = $true; Configured = $true; Id = '123456789' }
+        }
+    }
+
+    It 'reports the connection verified by the connectivity stage without claiming a Tailscale installation' {
+        $request = New-CoreRequest
+        $request.InstallTailscale = $false
+        $result = Invoke-DarckwareInstall -Request $request -RepoRoot $TestDrive
+        $result.Tailscale.Connected | Should -BeTrue
+        $result.Tailscale.Requested | Should -BeFalse
+        $result.Tailscale.Installed | Should -BeFalse
+        $result.Network.Mode | Should -Be 'LocalTailscale'
+    }
+
+    It 'still fails when the existing local Tailscale is disconnected' {
+        Mock Get-TailscaleStatus -ModuleName Installer.Core { [pscustomobject]@{ Connected = $false } }
+        $request = New-CoreRequest
+        $request.InstallTailscale = $false
+        { Invoke-DarckwareInstall -Request $request -RepoRoot $TestDrive } | Should -Throw '*Local Tailscale is not connected*'
+        Should -Invoke Invoke-RustDeskStage -ModuleName Installer.Core -Times 0
+    }
+}
+
 Describe 'router connectivity decisions' {
     BeforeEach {
         Mock Get-NetRoute -ModuleName Installer.Core { @() }
