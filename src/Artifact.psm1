@@ -20,24 +20,37 @@ function Get-InstallerConfig {
 
 function Invoke-ArtifactDownload {
     param([string]$Uri, [string]$OutFile, [scriptblock]$ProgressAction)
-    $client = [Net.WebClient]::new()
+    $request = [Net.WebRequest]::Create($Uri)
+    $response = $null
+    $input = $null
+    $output = $null
     try {
-        if ($null -ne $ProgressAction) {
-            $client.add_DownloadProgressChanged({
-                param($sender, $event)
-                & $ProgressAction ([int64]$event.BytesReceived) ([int64]$event.TotalBytesToReceive)
-            })
-        }
-        $download = $client.DownloadFileTaskAsync($Uri, $OutFile)
-        while (-not $download.Wait(100)) {
-            if ('System.Windows.Forms.Application' -as [type]) {
-                [System.Windows.Forms.Application]::DoEvents()
+        $response = $request.GetResponse()
+        $input = $response.GetResponseStream()
+        $output = [IO.File]::Open($OutFile, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        $total = [int64]$response.ContentLength
+        $written = [int64]0
+        $buffer = New-Object byte[] (64KB)
+        do {
+            $read = $input.Read($buffer, 0, $buffer.Length)
+            if ($read -gt 0) {
+                $output.Write($buffer, 0, $read)
+                $written += $read
+                if ($null -ne $ProgressAction) { & $ProgressAction $written $total }
+                if ('System.Windows.Forms.Application' -as [type]) {
+                    [System.Windows.Forms.Application]::DoEvents()
+                }
             }
+        } while ($read -gt 0)
+        if ($null -ne $ProgressAction) {
+            & $ProgressAction $written $(if ($total -gt 0) { $total } else { $written })
         }
-        $download.GetAwaiter().GetResult()
-        if ($null -ne $ProgressAction) { & $ProgressAction ([int64](Get-Item $OutFile).Length) ([int64](Get-Item $OutFile).Length) }
     }
-    finally { $client.Dispose() }
+    finally {
+        if ($null -ne $output) { $output.Dispose() }
+        if ($null -ne $input) { $input.Dispose() }
+        if ($null -ne $response) { $response.Dispose() }
+    }
 }
 
 function Get-VerifiedArtifact {

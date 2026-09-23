@@ -37,6 +37,7 @@ Describe 'Get-VerifiedArtifact' {
         $progress | Should -HaveCount 1
         $progress[0].Written | Should -Be 7
     }
+
     It 'rejects a checksum mismatch before signature verification' {
         Mock Invoke-ArtifactDownload -ModuleName Artifact { Set-Content -LiteralPath $OutFile -Value 'tampered' -NoNewline }
         Mock Get-AuthenticodeSignature -ModuleName Artifact { throw 'signature check must not run' }
