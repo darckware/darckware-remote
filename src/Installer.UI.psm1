@@ -1,4 +1,4 @@
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 
 function Get-WizardPageState {
     [CmdletBinding()]
@@ -191,13 +191,14 @@ function Show-InstallerWizard {
     $cancel = [System.Windows.Forms.Button]::new(); $cancel.Text = 'Cancelar'; $cancel.DialogResult = 'Cancel'; $cancel.Location = [System.Drawing.Point]::new(244, 510); $cancel.Size = [System.Drawing.Size]::new(100, 34)
     $form.Controls.Add($cancel); $form.CancelButton = $cancel
 
-    $pageIndex = 0; $request = $null; $updateNext = $null
+    # Event handlers run in child scopes; keep mutable wizard state in one shared object.
+    $wizardState = [pscustomobject]@{ PageIndex = 0; Request = $null }; $updateNext = $null
     $updateNext = {
         $valid = $true
-        if ($pageIndex -eq 0) {
+        if ($wizardState.PageIndex -eq 0) {
             $valid = $tailscaleCheck.Checked -or $rustDeskCheck.Checked
         }
-        elseif ($pageIndex -eq 1) {
+        elseif ($wizardState.PageIndex -eq 1) {
             if ($tailscaleCheck.Checked) {
                 $valid = -not [string]::IsNullOrWhiteSpace($hostnameBox.Text) -and -not [string]::IsNullOrWhiteSpace($authBox.Text)
             }
@@ -205,7 +206,7 @@ function Show-InstallerWizard {
                 $valid = -not [string]::IsNullOrWhiteSpace($routerBox.Text)
             }
         }
-        elseif ($pageIndex -eq 2) {
+        elseif ($wizardState.PageIndex -eq 2) {
             $valid = $passwordBox.Text -ceq $confirmBox.Text
         }
         $next.Enabled = $valid
@@ -226,30 +227,30 @@ function Show-InstallerWizard {
         if ($control -is [System.Windows.Forms.CheckBox] -or $control -is [System.Windows.Forms.RadioButton]) { $control.Add_CheckedChanged({ & $updateNext }) }
     }
     $back.Add_Click({
-        if ($pageIndex -gt 0) {
-            if ($pageIndex -eq 3 -and -not $rustDeskCheck.Checked) { $pageIndex = 1 } else { $pageIndex-- }
-            & $showPage $pageIndex
+        if ($wizardState.PageIndex -gt 0) {
+            if ($wizardState.PageIndex -eq 3 -and -not $rustDeskCheck.Checked) { $wizardState.PageIndex = 1 } else { $wizardState.PageIndex-- }
+            & $showPage $wizardState.PageIndex
         }
     })
     $next.Add_Click({
         $state = Get-WizardPageState -InstallTailscale $tailscaleCheck.Checked -InstallRustDesk $rustDeskCheck.Checked -TailscaleConnected $localRadio.Checked
-        if ($pageIndex -eq 0 -and -not $state.CanContinue) { $errorLabel.Text = $state.ValidationMessage; $tailscaleCheck.Focus(); return }
-        if ($pageIndex -eq 1) {
+        if ($wizardState.PageIndex -eq 0 -and -not $state.CanContinue) { $errorLabel.Text = $state.ValidationMessage; $tailscaleCheck.Focus(); return }
+        if ($wizardState.PageIndex -eq 1) {
             if ($tailscaleCheck.Checked -and [string]::IsNullOrWhiteSpace($hostnameBox.Text)) { $errorLabel.Text = 'Informe o nome deste computador no Tailscale.'; $hostnameBox.Focus(); return }
             if ($tailscaleCheck.Checked -and [string]::IsNullOrWhiteSpace($authBox.Text)) { $errorLabel.Text = 'Informe a chave de autenticação Tailscale.'; $authBox.Focus(); return }
             if ($rustDeskCheck.Checked -and -not $tailscaleCheck.Checked -and $routerRadio.Checked -and [string]::IsNullOrWhiteSpace($routerBox.Text)) { $errorLabel.Text = 'Informe o IPv4 da estação roteadora.'; $routerBox.Focus(); return }
         }
-        if ($pageIndex -eq 2 -and $passwordBox.Text -cne $confirmBox.Text) { $errorLabel.Text = 'As senhas do RustDesk não coincidem.'; $confirmBox.Focus(); return }
-        if ($pageIndex -lt 3) {
-            if ($pageIndex -eq 1 -and -not $rustDeskCheck.Checked) { $pageIndex = 3 } else { $pageIndex++ }
-            if ($pageIndex -eq 3) {
+        if ($wizardState.PageIndex -eq 2 -and $passwordBox.Text -cne $confirmBox.Text) { $errorLabel.Text = 'As senhas do RustDesk não coincidem.'; $confirmBox.Focus(); return }
+        if ($wizardState.PageIndex -lt 3) {
+            if ($wizardState.PageIndex -eq 1 -and -not $rustDeskCheck.Checked) { $wizardState.PageIndex = 3 } else { $wizardState.PageIndex++ }
+            if ($wizardState.PageIndex -eq 3) {
                 $mode = $(if ($tailscaleCheck.Checked -or $localRadio.Checked) { 'LocalTailscale' } else { 'Router' })
                 $review.Text = "Componentes: $(if ($tailscaleCheck.Checked) { 'Tailscale ' })$(if ($rustDeskCheck.Checked) { 'RustDesk' })`r`nConectividade: $mode`r`nChave Tailscale: $(if ($authBox.TextLength) { 'fornecida' } else { 'não fornecida' })`r`nSenha RustDesk: $(if ($passwordBox.TextLength) { 'fornecida' } else { 'não fornecida' })"
                 $routeConfirm.Visible = ($mode -eq 'Router')
             }
-            & $showPage $pageIndex; return
+            & $showPage $wizardState.PageIndex; return
         }
-        $request = [pscustomobject]@{
+        $wizardState.Request = [pscustomobject]@{
             InstallTailscale = $tailscaleCheck.Checked; InstallRustDesk = $rustDeskCheck.Checked
             ConnectivityMode = $(if ($tailscaleCheck.Checked -or $localRadio.Checked) { 'LocalTailscale' } else { 'Router' })
             RouterIp = $routerBox.Text; TailscaleHostname = $hostnameBox.Text
@@ -260,7 +261,7 @@ function Show-InstallerWizard {
         $authBox.Clear(); $passwordBox.Clear(); $confirmBox.Clear(); $form.DialogResult = 'OK'; $form.Close()
     })
 
-    try { if ($form.ShowDialog() -eq 'OK') { return $request }; return $null }
+    try { if ($form.ShowDialog() -eq 'OK') { return $wizardState.Request }; return $null }
     finally {
         $authBox.Clear(); $passwordBox.Clear(); $confirmBox.Clear()
         if ($null -ne $brand.Image) { $brand.Image.Dispose() }

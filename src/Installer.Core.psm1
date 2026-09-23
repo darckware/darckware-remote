@@ -1,7 +1,8 @@
 Set-StrictMode -Version Latest
 
 foreach ($moduleName in @('Artifact', 'Security', 'Network', 'Tailscale', 'RustDesk')) {
-    Import-Module (Join-Path $PSScriptRoot "$moduleName.psm1") -Force
+    # Forcing a nested reload removes the launcher's existing command bindings.
+    Import-Module (Join-Path $PSScriptRoot "$moduleName.psm1")
 }
 
 function Get-ObjectValue {

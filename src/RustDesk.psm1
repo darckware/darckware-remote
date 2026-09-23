@@ -29,11 +29,38 @@ function Invoke-RustDeskCommand {
         [Parameter(Mandatory)][ValidateNotNull()][string[]]$Arguments
     )
 
-    $output = & $ExecutablePath @Arguments 2>&1
-    [pscustomobject]@{
-        ExitCode = $LASTEXITCODE
-        Output = ($output | Out-String).Trim()
+    # Windows PowerShell does not reliably wait for GUI executables invoked with &.
+    # Redirect both streams explicitly and quote each native Windows argument.
+    $quotedArguments = foreach ($argument in $Arguments) {
+        $escaped = [regex]::Replace($argument, '(\\*)"', '$1$1\"')
+        $escaped = [regex]::Replace($escaped, '(\\+)$', '$1$1')
+        '"' + $escaped + '"'
     }
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $ExecutablePath
+    $startInfo.Arguments = $quotedArguments -join ' '
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    try {
+        $null = $process.Start()
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(30000)) {
+            throw 'RustDesk command did not exit within 30 seconds.'
+        }
+        if (-not $stdout.Wait(5000) -or -not $stderr.Wait(5000)) {
+            throw 'RustDesk command output did not close within the deadline.'
+        }
+        [pscustomobject]@{
+            ExitCode = $process.ExitCode
+            Output = $stdout.Result.Trim()
+        }
+    }
+    finally { $process.Dispose() }
 }
 
 function Wait-RustDeskService {
@@ -73,10 +100,18 @@ function Install-RustDesk {
     $alreadyInstalled = Test-Path -LiteralPath $executablePath -PathType Leaf
     if (-not $alreadyInstalled) {
         $process = Start-Process -FilePath $InstallerPath -ArgumentList @('--silent-install') `
-            -Wait -PassThru -NoNewWindow -ErrorAction Stop
-        if ([int]$process.ExitCode -ne 0) {
-            throw "RustDesk installer failed with exit code $($process.ExitCode)."
+            -PassThru -WindowStyle Hidden -ErrorAction Stop
+        try {
+            # Start-Process -Wait also waits for the persistent RustDesk children.
+            # Wait only for the installer itself, with a bounded deadline.
+            if (-not $process.WaitForExit(120000)) {
+                throw 'RustDesk installer did not exit within 120 seconds. Check its status before retrying.'
+            }
+            if ($null -eq $process.ExitCode -or [int]$process.ExitCode -ne 0) {
+                throw "RustDesk installer failed with exit code $($process.ExitCode)."
+            }
         }
+        finally { $process.Dispose() }
         if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
             throw 'RustDesk executable was not found after installation.'
         }

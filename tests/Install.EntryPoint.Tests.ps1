@@ -1,6 +1,12 @@
 Describe 'install.ps1 contract' {
     BeforeAll { $script:Content = Get-Content "$PSScriptRoot/../install.ps1" -Raw }
 
+    It 'loads configuration and error reporting in a fresh launcher process' {
+        $output = & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot/Startup.Smoke.ps1" 2>&1
+        $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
+        $output | Should -Contain 'PASS: startup configuration and error reporting are available.'
+    }
+
     It 'does not define plain-text secret parameters' {
         $script:Content | Should -Not -Match '\[string\]\s*\$(TailscaleAuthKey|RustDeskPassword)\b'
         $script:Content | Should -Match '\[string\]\s*\$TailscaleAuthKeyFile\b'

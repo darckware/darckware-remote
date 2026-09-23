@@ -48,6 +48,18 @@ Describe 'New-DarckwareBrandImage' {
 }
 
 Describe 'Show-InstallerWizard contract' {
+    It 'advances with local Tailscale and retains the completed request' {
+        $output = & powershell.exe -NoLogo -NoProfile -STA -ExecutionPolicy Bypass -File "$PSScriptRoot/UI.Navigation.Smoke.ps1" 2>&1
+        $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
+        $output | Should -Contain 'PASS: local Tailscale navigation, back, review and request return.'
+    }
+
+    It 'displays Portuguese text correctly in Windows PowerShell' {
+        $output = & powershell.exe -NoLogo -NoProfile -STA -ExecutionPolicy Bypass -File "$PSScriptRoot/UI.Text.Smoke.ps1" 2>&1
+        $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
+        $output | Should -Contain 'PASS: wizard displays Portuguese accents and punctuation correctly.'
+    }
+
     It 'exports the wizard and result interfaces' {
         Get-Command Show-InstallerWizard -Module Installer.UI | Should -Not -BeNullOrEmpty
         Get-Command Show-InstallProgress -Module Installer.UI | Should -Not -BeNullOrEmpty

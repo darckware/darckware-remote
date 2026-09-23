@@ -1,6 +1,7 @@
 Set-StrictMode -Version Latest
 
-Import-Module (Join-Path $PSScriptRoot 'Security.psm1') -Force
+# Reuse the dependency so commands already imported by the launcher stay available.
+Import-Module (Join-Path $PSScriptRoot 'Security.psm1')
 
 function Test-TailscaleHostname {
     [CmdletBinding()]

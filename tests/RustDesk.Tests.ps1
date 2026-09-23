@@ -1,5 +1,14 @@
 BeforeAll { Import-Module "$PSScriptRoot/../src/RustDesk.psm1" -Force }
 
+BeforeAll {
+    function New-InstallerProcessStub([int]$ExitCode = 0, [bool]$Completed = $true) {
+        $process = [pscustomobject]@{ ExitCode = $ExitCode; Completed = $Completed }
+        $process | Add-Member ScriptMethod WaitForExit { param($Timeout) return $this.Completed }
+        $process | Add-Member ScriptMethod Dispose {}
+        return $process
+    }
+}
+
 Describe 'New-RustDeskConfigToken' {
     It 'serializes the exact fixed fields in the format consumed by RustDesk' {
         $token = New-RustDeskConfigToken -Host '100.105.235.114' -Key 'public-key=' -Relay '100.105.235.114:21117'
@@ -17,7 +26,7 @@ Describe 'New-RustDeskConfigToken' {
 
 Describe 'Install-RustDesk' {
     BeforeEach {
-        Mock Start-Process -ModuleName RustDesk { [pscustomobject]@{ ExitCode = 0 } }
+        Mock Start-Process -ModuleName RustDesk { New-InstallerProcessStub }
         Mock Wait-RustDeskService -ModuleName RustDesk {}
     }
 
@@ -35,14 +44,14 @@ Describe 'Install-RustDesk' {
             $FilePath -eq 'C:\cache\rustdesk.exe' -and
             $ArgumentList.Count -eq 1 -and
             $ArgumentList[0] -eq '--silent-install' -and
-            $Wait -eq $true -and $PassThru -eq $true
+            -not $Wait -and $PassThru -eq $true
         }
         Should -Invoke Wait-RustDeskService -ModuleName RustDesk -Times 1
     }
 
     It 'rejects a nonzero installer exit code before waiting for the service' {
         Mock Test-Path -ModuleName RustDesk { $false }
-        Mock Start-Process -ModuleName RustDesk { [pscustomobject]@{ ExitCode = 7 } }
+        Mock Start-Process -ModuleName RustDesk { New-InstallerProcessStub -ExitCode 7 }
 
         { Install-RustDesk -InstallerPath 'C:\cache\rustdesk.exe' } | Should -Throw '*exit code 7*'
 
@@ -57,6 +66,13 @@ Describe 'Install-RustDesk' {
         $result.Installed | Should -BeFalse
         Should -Invoke Start-Process -ModuleName RustDesk -Times 0
         Should -Invoke Wait-RustDeskService -ModuleName RustDesk -Times 1
+    }
+
+    It 'stops before configuration when the installer does not exit by its deadline' {
+        Mock Test-Path -ModuleName RustDesk { $false }
+        Mock Start-Process -ModuleName RustDesk { New-InstallerProcessStub -Completed $false }
+        { Install-RustDesk -InstallerPath 'C:\cache\rustdesk.exe' } | Should -Throw '*120 seconds*'
+        Should -Invoke Wait-RustDeskService -ModuleName RustDesk -Times 0
     }
 }
 
