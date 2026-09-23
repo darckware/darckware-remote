@@ -28,7 +28,13 @@ function Invoke-ArtifactDownload {
                 & $ProgressAction ([int64]$event.BytesReceived) ([int64]$event.TotalBytesToReceive)
             })
         }
-        $client.DownloadFile($Uri, $OutFile)
+        $download = $client.DownloadFileTaskAsync($Uri, $OutFile)
+        while (-not $download.Wait(100)) {
+            if ('System.Windows.Forms.Application' -as [type]) {
+                [System.Windows.Forms.Application]::DoEvents()
+            }
+        }
+        $download.GetAwaiter().GetResult()
         if ($null -ne $ProgressAction) { & $ProgressAction ([int64](Get-Item $OutFile).Length) ([int64](Get-Item $OutFile).Length) }
     }
     finally { $client.Dispose() }

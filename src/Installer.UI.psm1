@@ -306,7 +306,10 @@ function Show-InstallProgress {
     $progress.Maximum = 100
     $form | Add-Member ScriptMethod UpdateProgress {
         param([int64]$Written, [int64]$Total)
-        if ($Total -gt 0) { $this.Controls[2].Value = [Math]::Min(100, [Math]::Max(0, [int](($Written * 100) / $Total))) }
+        [Action]$update = {
+            if ($Total -gt 0) { $this.Controls[2].Value = [Math]::Min(100, [Math]::Max(0, [int](($Written * 100) / $Total))) }
+        }.GetNewClosure()
+        if ($this.InvokeRequired) { $this.BeginInvoke($update) | Out-Null } else { & $update }
         [System.Windows.Forms.Application]::DoEvents()
     }
     $form.Controls.AddRange(@($title, $detail, $progress))
