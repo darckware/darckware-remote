@@ -18,8 +18,8 @@ Describe 'public repository contract' {
 
     It 'documents the exact primary installation workflow' {
         $readme = Get-Content (Join-Path $script:RepoRoot 'README.md') -Raw
-        $readme | Should -Match ([regex]::Escape('git clone https://github.com/marcelodarckferreira/rustdesk-darckware.git'))
-        $readme | Should -Match ([regex]::Escape('cd rustdesk-darckware'))
+        $readme | Should -Match ([regex]::Escape('git clone https://github.com/darckware/darckware-remote.git'))
+        $readme | Should -Match ([regex]::Escape('cd darckware-remote'))
         $readme | Should -Match ([regex]::Escape('.\install.cmd'))
     }
 

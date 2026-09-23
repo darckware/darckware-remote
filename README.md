@@ -39,8 +39,8 @@ The binaries are downloaded from the official channels and signed by their respe
 Open **Command Prompt** or **PowerShell** and run:
 
 ```powershell
-git clone https://github.com/marcelodarckferreira/rustdesk-darckware.git
-cd rustdesk-darckware
+git clone https://github.com/darckware/darckware-remote.git
+cd darckware-remote
 .\install.cmd
 ```
 
