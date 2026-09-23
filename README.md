@@ -6,37 +6,37 @@
   </picture>
 </p>
 
-# Darckware Remoto
+# Darckware Remote
 
-Instalador assistido para preparar estações Windows 11 com **Tailscale**, **RustDesk** ou os dois componentes. O Darckware Remoto baixa os instaladores oficiais, valida hash SHA-256, assinatura Authenticode e fornecedor antes de executá-los, configura o cliente RustDesk para a infraestrutura privada Darckware e registra um relatório local sem credenciais.
+Assisted installer to prepare Windows 11 workstations with **Tailscale**, **RustDesk**, or both components. Darckware Remote downloads the official installers, validates the SHA-256 hash, Authenticode signature, and publisher before running them, configures the RustDesk client for Darckware's private infrastructure, and records a local report with no credentials.
 
-> O instalador tem identidade Darckware, mas instala os clientes oficiais de RustDesk e Tailscale. Ele não altera a marca interna desses aplicativos e não inclui binários de terceiros no repositório.
+> The installer carries Darckware's identity, but installs the official RustDesk and Tailscale clients. It does not alter these applications' internal branding and does not include third-party binaries in the repository.
 
-Os binários são baixados dos canais oficiais e assinados pelos respectivos fornecedores; o instalador valida também o hash fixado no manifesto antes de executá-los.
+The binaries are downloaded from the official channels and signed by their respective vendors; the installer also validates the hash pinned in the manifest before running them.
 
-## O que ele faz
+## What it does
 
-- instala Tailscale `1.102.3` em modo não assistido e conecta a estação à tailnet;
-- instala RustDesk `1.4.9` e configura os servidores ID e relay privados da Darckware;
-- permite acesso ao RustDesk por um Tailscale local ou por uma estação roteadora na rede LAN;
-- no modo roteador, cria somente uma rota persistente `/32` para o servidor autorizado;
-- testa as portas TCP `21116` e `21117` antes de instalar o RustDesk pelo roteador;
-- permite configurar, opcionalmente, uma senha permanente do RustDesk;
-- aceita reexecução: componentes existentes são reutilizados e o RustDesk é reconfigurado;
-- grava estado e logs sem armazenar a chave Tailscale ou a senha RustDesk.
+- installs Tailscale `1.102.3` in unattended mode and connects the workstation to the tailnet;
+- installs RustDesk `1.4.9` and configures Darckware's private ID and relay servers;
+- allows access to RustDesk via a local Tailscale or via a router station on the LAN;
+- in router mode, creates only one persistent `/32` route to the authorized server;
+- tests TCP ports `21116` and `21117` before installing RustDesk through the router;
+- optionally allows configuring a permanent RustDesk password;
+- supports re-running: existing components are reused and RustDesk is reconfigured;
+- writes state and logs without storing the Tailscale key or the RustDesk password.
 
-## Requisitos
+## Requirements
 
 - Windows 11 x86-64;
-- conta com permissão de administrador;
-- Windows PowerShell 5.1 ou PowerShell 7;
-- acesso HTTPS aos endpoints oficiais de RustDesk e Tailscale;
-- Git, ou acesso ao download ZIP do GitHub;
-- para o modo roteador, uma estação previamente preparada conforme [Pré-requisitos do roteador](docs/router-prerequisites.md).
+- account with administrator permission;
+- Windows PowerShell 5.1 or PowerShell 7;
+- HTTPS access to the official RustDesk and Tailscale endpoints;
+- Git, or access to the ZIP download from GitHub;
+- for router mode, a workstation previously prepared according to [Router prerequisites](docs/router-prerequisites.md).
 
-## Instalação rápida
+## Quick install
 
-Abra o **Prompt de Comando** ou **PowerShell** e execute:
+Open **Command Prompt** or **PowerShell** and run:
 
 ```powershell
 git clone https://github.com/marcelodarckferreira/rustdesk-darckware.git
@@ -44,40 +44,40 @@ cd rustdesk-darckware
 .\install.cmd
 ```
 
-O Windows solicitará elevação pelo UAC. Confirme somente se o caminho exibido corresponder ao repositório clonado.
+Windows will request elevation via UAC. Confirm only if the path shown matches the cloned repository.
 
-### Sem Git
+### Without Git
 
-1. Abra a página do repositório no GitHub.
-2. Selecione **Code > Download ZIP**.
-3. Extraia todo o ZIP para uma pasta local.
-4. Clique duas vezes em `install.cmd`.
-5. Confirme a solicitação do UAC.
+1. Open the repository page on GitHub.
+2. Select **Code > Download ZIP**.
+3. Extract the entire ZIP to a local folder.
+4. Double-click `install.cmd`.
+5. Confirm the UAC prompt.
 
-Não execute `install.cmd` diretamente de dentro do ZIP.
+Do not run `install.cmd` directly from inside the ZIP.
 
-## Escolhas disponíveis
+## Available choices
 
-| Seleção | Resultado |
+| Selection | Result |
 |---|---|
-| Tailscale | Instala e conecta somente o cliente Tailscale. |
-| RustDesk | Instala o RustDesk usando um Tailscale local já conectado ou uma estação roteadora. |
-| Tailscale + RustDesk | Conecta o Tailscale primeiro e só então instala/configura o RustDesk. Não cria rota estática. |
+| Tailscale | Installs and connects only the Tailscale client. |
+| RustDesk | Installs RustDesk using an already-connected local Tailscale or a router station. |
+| Tailscale + RustDesk | Connects Tailscale first and only then installs/configures RustDesk. Does not create a static route. |
 
-### Chave de autenticação Tailscale
+### Tailscale authentication key
 
-Use uma chave **one-off**, pré-aprovada e com as tags mínimas necessárias. Evite chaves reutilizáveis. O hostname deve:
+Use a **one-off** key, pre-approved and with the minimum necessary tags. Avoid reusable keys. The hostname must:
 
-- ter de 1 a 63 caracteres;
-- usar somente letras ASCII, números e hífen;
-- começar e terminar com letra ou número;
-- não conter espaços, pontos ou comandos.
+- be 1 to 63 characters long;
+- use only ASCII letters, numbers, and hyphens;
+- start and end with a letter or number;
+- not contain spaces, dots, or commands.
 
-A chave informada pela interface é mantida como valor seguro e entregue ao Tailscale por arquivo temporário protegido. Ela é removida mesmo quando o enrolamento falha.
+The key entered through the interface is kept as a secure value and delivered to Tailscale via a protected temporary file. It is removed even when enrollment fails.
 
-## Instalação não interativa
+## Non-interactive installation
 
-Segredos não são aceitos diretamente na linha de comando. Cada arquivo secreto deve conter somente o valor, ter ACL restrita a Administradores/SYSTEM e ser removido pelo sistema de implantação depois que o processo terminar.
+Secrets are not accepted directly on the command line. Each secret file must contain only the value, have an ACL restricted to Administrators/SYSTEM, and be removed by the deployment system after the process finishes.
 
 ### Tailscale
 
@@ -88,7 +88,7 @@ Segredos não são aceitos diretamente na linha de comando. Cada arquivo secreto
   -TailscaleAuthKeyFile 'C:\Secure\tailscale-auth-key.txt'
 ```
 
-### RustDesk com Tailscale local
+### RustDesk with local Tailscale
 
 ```powershell
 .\install.ps1 -NonInteractive `
@@ -97,9 +97,9 @@ Segredos não são aceitos diretamente na linha de comando. Cada arquivo secreto
   -RustDeskPasswordFile 'C:\Secure\rustdesk-password.txt'
 ```
 
-`-RustDeskPasswordFile` é opcional.
+`-RustDeskPasswordFile` is optional.
 
-### RustDesk por estação roteadora
+### RustDesk via router station
 
 ```powershell
 .\install.ps1 -NonInteractive `
@@ -109,9 +109,9 @@ Segredos não são aceitos diretamente na linha de comando. Cada arquivo secreto
   -ConfirmRouteReplacement
 ```
 
-O parâmetro de confirmação autoriza apenas a substituição de uma rota anteriormente registrada como gerenciada pelo Darckware Remoto. Rotas conflitantes não gerenciadas são preservadas e causam falha segura.
+The confirmation parameter authorizes only the replacement of a route previously registered as managed by Darckware Remote. Conflicting unmanaged routes are preserved and cause a safe failure.
 
-### Tailscale e RustDesk
+### Tailscale and RustDesk
 
 ```powershell
 .\install.ps1 -NonInteractive `
@@ -122,58 +122,58 @@ O parâmetro de confirmação autoriza apenas a substituição de uma rota anter
   -RustDeskPasswordFile 'C:\Secure\rustdesk-password.txt'
 ```
 
-## Códigos de saída
+## Exit codes
 
-| Código | Significado |
+| Code | Meaning |
 |---:|---|
-| `0` | instalação concluída |
-| `1` | falha operacional |
-| `2` | entrada inválida |
-| `1223` | UAC cancelado ou assistente cancelado |
+| `0` | installation completed |
+| `1` | operational failure |
+| `2` | invalid input |
+| `1223` | UAC cancelled or wizard cancelled |
 
-## Segurança e verificação
+## Security and verification
 
-Antes de executar um instalador, o Darckware Remoto exige:
+Before running an installer, Darckware Remote requires:
 
-1. URL HTTPS oficial e versão fixa;
-2. hash SHA-256 idêntico ao manifesto;
-3. assinatura Authenticode válida;
-4. fornecedor esperado no certificado.
+1. official HTTPS URL and pinned version;
+2. SHA-256 hash identical to the manifest;
+3. valid Authenticode signature;
+4. expected publisher in the certificate.
 
-Uma divergência interrompe o fluxo antes de `msiexec.exe` ou do executável RustDesk. Chaves e senhas não são gravadas em estado, resultado ou log. Os binários baixados permanecem fora do Git.
+A mismatch stops the flow before `msiexec.exe` or the RustDesk executable. Keys and passwords are not written to state, result, or log. Downloaded binaries stay out of Git.
 
-## Logs e estado
+## Logs and state
 
-Arquivos operacionais ficam em:
+Operational files are located at:
 
 ```text
 %ProgramData%\Darckware\RustDeskInstaller\
 ```
 
-- `installer.log`: etapas e erros com redação de segredos;
-- `state.json`: versões, horário e eventual rota gerenciada;
-- `downloads\`: cache local dos instaladores verificados.
+- `installer.log`: steps and errors with secrets redacted;
+- `state.json`: versions, timestamp, and any managed route;
+- `downloads\`: local cache of verified installers.
 
-Consulte [Solução de problemas](docs/troubleshooting.md) para diagnóstico e recuperação.
+See [Troubleshooting](docs/troubleshooting.md) for diagnostics and recovery.
 
-## Reexecução e remoção
+## Re-running and removal
 
-O instalador é idempotente dentro do escopo documentado:
+The installer is idempotent within the documented scope:
 
-- uma instalação Tailscale já conectada é reutilizada;
-- uma instalação RustDesk existente recebe novamente a configuração fixa;
-- uma rota `/32` idêntica é reutilizada;
-- uma rota gerenciada divergente só é substituída após confirmação;
-- ao usar Tailscale local, somente a rota anteriormente registrada como gerenciada é removida.
+- an already-connected Tailscale installation is reused;
+- an existing RustDesk installation receives the fixed configuration again;
+- an identical `/32` route is reused;
+- a divergent managed route is only replaced after confirmation;
+- when using local Tailscale, only the route previously registered as managed is removed.
 
-O Darckware Remoto **não é um desinstalador**. Remova RustDesk ou Tailscale em **Configurações > Aplicativos > Aplicativos instalados**. Antes de remover manualmente uma rota, confirme destino, gateway e interface conforme o guia de troubleshooting.
+Darckware Remote **is not an uninstaller**. Remove RustDesk or Tailscale via **Settings > Apps > Installed apps**. Before manually removing a route, confirm the destination, gateway, and interface as described in the troubleshooting guide.
 
-## Status de validação
+## Validation status
 
-O repositório contém testes Pester e CI para Windows. Uma execução de aceitação em uma VM Windows 11 limpa ainda é obrigatória antes de classificar uma versão como pronta para produção. O roteiro está em [Aceitação Windows 11](docs/windows-11-acceptance.md).
+The repository contains Pester tests and CI for Windows. An acceptance run on a clean Windows 11 VM is still required before classifying a version as production-ready. The checklist is in [Windows 11 Acceptance](docs/windows-11-acceptance.md).
 
-## Licenças
+## Licenses
 
-Os scripts produzidos pela Darckware são licenciados sob MIT; veja [LICENSE](LICENSE). RustDesk e Tailscale mantêm suas próprias licenças, marcas, assinaturas e termos. Veja [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The scripts produced by Darckware are licensed under MIT; see [LICENSE](LICENSE). RustDesk and Tailscale maintain their own licenses, trademarks, signatures, and terms. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Este projeto não afirma que a Darckware criou ou assinou os binários de terceiros.
+This project does not claim that Darckware created or signed the third-party binaries.
