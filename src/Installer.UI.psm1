@@ -298,24 +298,76 @@ function Show-InstallProgress {
     $detail = New-DarckwareLabel 'Validando, instalando e configurando os componentes selecionados…' 10
     $detail.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#7C8794')
     $detail.Location = [System.Drawing.Point]::new(36, 78)
+    $detail.AutoSize = $false
+    $detail.Size = [System.Drawing.Size]::new(448, 38)
     $progress = [System.Windows.Forms.ProgressBar]::new()
     $progress.Location = [System.Drawing.Point]::new(38, 124)
     $progress.Size = [System.Drawing.Size]::new(444, 12)
-    $progress.Style = 'Continuous'
+    $progress.Style = 'Marquee'
+    $progress.MarqueeAnimationSpeed = 30
     $progress.Minimum = 0
     $progress.Maximum = 100
     $form | Add-Member ScriptMethod UpdateProgress {
-        param([int64]$Written, [int64]$Total)
-        [Action]$update = {
-            if ($Total -gt 0) { $this.Controls[2].Value = [Math]::Min(100, [Math]::Max(0, [int](($Written * 100) / $Total))) }
-        }.GetNewClosure()
-        if ($this.InvokeRequired) { $this.BeginInvoke($update) | Out-Null } else { & $update }
-        [System.Windows.Forms.Application]::DoEvents()
+        param([int64]$Written, [int64]$Total, [string]$Status)
+        # Only the UI thread touches controls; the worker publishes plain data.
+        if (-not [string]::IsNullOrEmpty($Status)) { $this.Controls[1].Text = $Status }
+        if ($Total -gt 0) {
+            $this.Controls[2].Style = 'Continuous'
+            $percent = [int][Math]::Min(100, [Math]::Max(0, ([double]$Written * 100 / $Total)))
+            $this.Controls[2].Value = $percent
+            $this.Controls[1].Text += " ($percent%)"
+        }
+        else {
+            $this.Controls[2].Style = 'Marquee'
+        }
     }
     $form.Controls.AddRange(@($title, $detail, $progress))
     $form.Show()
     [System.Windows.Forms.Application]::DoEvents()
     return $form
+}
+
+function Invoke-InstallWithProgress {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][pscustomobject]$Request,
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [Parameter(Mandatory)][System.Windows.Forms.Form]$Form
+    )
+
+    $shared = [hashtable]::Synchronized(@{ Progress = $null })
+    $worker = [PowerShell]::Create()
+    try {
+        [void]$worker.AddScript({
+            param($Request, $RepoRoot, $Shared)
+            $ErrorActionPreference = 'Stop'
+            Import-Module (Join-Path $RepoRoot 'src/Installer.Core.psm1') -Force
+            $state = @{ Status = 'Preparando a instalacao...' }
+            $callback = {
+                param($Written, $Total, $Status)
+                if (-not [string]::IsNullOrEmpty($Status)) { $state.Status = $Status }
+                $Shared.Progress = [pscustomobject]@{ Written = $Written; Total = $Total; Status = $state.Status }
+            }.GetNewClosure()
+            Invoke-DarckwareInstall -Request $Request -RepoRoot $RepoRoot -ProgressAction $callback
+        }).AddArgument($Request).AddArgument($RepoRoot).AddArgument($shared)
+        $pending = $worker.BeginInvoke()
+        $lastProgress = $null
+        while (-not $pending.IsCompleted) {
+            $current = $shared.Progress
+            if ($null -ne $current -and -not [object]::ReferenceEquals($current, $lastProgress)) {
+                $Form.UpdateProgress($current.Written, $current.Total, $current.Status)
+                $lastProgress = $current
+            }
+            [System.Windows.Forms.Application]::DoEvents()
+            Start-Sleep -Milliseconds 50
+        }
+        $result = $worker.EndInvoke($pending)
+        if ($worker.HadErrors) { throw $worker.Streams.Error[0] }
+        $current = $shared.Progress
+        if ($null -ne $current) { $Form.UpdateProgress($current.Written, $current.Total, $current.Status) }
+        return $result
+    }
+    finally { $worker.Dispose() }
 }
 
 function Close-InstallProgress {
@@ -337,4 +389,4 @@ function Show-InstallFailure {
     ) | Out-Null
 }
 
-Export-ModuleMember -Function Get-WizardPageState, New-DarckwareBrandImage, Show-InstallerWizard, Show-InstallProgress, Close-InstallProgress, Show-InstallResult, Show-InstallFailure
+Export-ModuleMember -Function Get-WizardPageState, New-DarckwareBrandImage, Show-InstallerWizard, Show-InstallProgress, Invoke-InstallWithProgress, Close-InstallProgress, Show-InstallResult, Show-InstallFailure

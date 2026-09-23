@@ -64,6 +64,7 @@ function Get-VerifiedArtifact {
     $target = Join-Path $CacheRoot $Artifact.fileName
     New-Item -ItemType Directory -Force $CacheRoot | Out-Null
     Invoke-ArtifactDownload -Uri $Artifact.url -OutFile $target -ProgressAction $ProgressAction
+    if ($null -ne $ProgressAction) { & $ProgressAction 0 0 "Validando o pacote $($Artifact.name)..." }
     $actual = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $Artifact.sha256.ToLowerInvariant()) {
         Remove-Item $target -Force

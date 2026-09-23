@@ -84,11 +84,12 @@ try {
     $progressForm = $null
     if (-not $NonInteractive) { $progressForm = Show-InstallProgress }
     try {
-        $progressAction = $null
         if ($null -ne $progressForm) {
-            $progressAction = { param($written, $total) $progressForm.UpdateProgress($written, $total) }.GetNewClosure()
+            $result = Invoke-InstallWithProgress -Request $request -RepoRoot $PSScriptRoot -Form $progressForm
         }
-        $result = Invoke-DarckwareInstall -Request $request -RepoRoot $PSScriptRoot -ProgressAction $progressAction
+        else {
+            $result = Invoke-DarckwareInstall -Request $request -RepoRoot $PSScriptRoot
+        }
     }
     finally {
         if ($null -ne $progressForm) { Close-InstallProgress -Form $progressForm }

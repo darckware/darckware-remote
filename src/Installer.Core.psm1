@@ -145,8 +145,11 @@ function Invoke-TailscaleStage {
         # A missing or not-yet-functional client is handled by the verified installation below.
     }
 
+    if ($null -ne $ProgressAction) { & $ProgressAction 0 0 'Baixando Tailscale...' }
     $artifact = Get-VerifiedArtifact -Artifact $Config.Artifacts.tailscale -CacheRoot (Join-Path $StateRoot 'downloads') -ProgressAction $ProgressAction
+    if ($null -ne $ProgressAction) { & $ProgressAction 0 0 'Instalando Tailscale...' }
     $installation = Install-Tailscale -MsiPath $artifact
+    if ($null -ne $ProgressAction) { & $ProgressAction 0 0 'Conectando Tailscale...' }
     $status = Connect-Tailscale -Hostname $Request.TailscaleHostname -AuthKey $Request.TailscaleAuthKey -SecretDirectory $StateRoot
     [pscustomobject]@{
         Requested = $true
@@ -244,11 +247,15 @@ function Invoke-ConnectivityStage {
 function Invoke-RustDeskStage {
     param($Request, $Config, [string]$StateRoot, [scriptblock]$ProgressAction)
 
+    if ($null -ne $ProgressAction) { & $ProgressAction 0 0 'Baixando RustDesk...' }
     $artifact = Get-VerifiedArtifact -Artifact $Config.Artifacts.rustdesk -CacheRoot (Join-Path $StateRoot 'downloads') -ProgressAction $ProgressAction
+    if ($null -ne $ProgressAction) { & $ProgressAction 0 0 'Instalando RustDesk...' }
     $installation = Install-RustDesk -InstallerPath $artifact
+    if ($null -ne $ProgressAction) { & $ProgressAction 0 0 'Configurando RustDesk...' }
     $token = New-RustDeskConfigToken -Host $Config.Deployment.rustdesk.idServer `
         -Key $Config.Deployment.rustdesk.publicKey -Relay $Config.Deployment.rustdesk.relayServer
     Set-RustDeskConfiguration -ExecutablePath $installation.ExecutablePath -ConfigToken $token -Password $Request.RustDeskPassword
+    if ($null -ne $ProgressAction) { & $ProgressAction 0 0 'Verificando o ID do RustDesk...' }
     $id = Get-RustDeskId -ExecutablePath $installation.ExecutablePath
     [pscustomobject]@{
         Requested = $true
@@ -267,6 +274,7 @@ function Invoke-DarckwareInstall {
         [scriptblock]$ProgressAction
     )
 
+    if ($null -ne $ProgressAction) { & $ProgressAction 0 0 'Validando os componentes selecionados...' }
     Test-InstallRequest -Request $Request
     $effectiveRequest = Copy-NormalizedRequest -Request $Request
     $config = Get-InstallerConfig -RepoRoot $RepoRoot
@@ -280,9 +288,11 @@ function Invoke-DarckwareInstall {
         Write-InstallerLog -Path $logPath -Text 'Installation started.'
         $tailscale = [pscustomobject]@{ Requested = $false; Installed = $false; Connected = $false; RebootRequired = $false }
         if ($effectiveRequest.InstallTailscale) {
+            if ($null -ne $ProgressAction) { & $ProgressAction 0 0 'Verificando Tailscale...' }
             $tailscale = Invoke-TailscaleStage -Request $effectiveRequest -Config $config -StateRoot $stateRoot -ProgressAction $ProgressAction
         }
 
+        if ($null -ne $ProgressAction) { & $ProgressAction 0 0 'Verificando a conectividade...' }
         $network = Invoke-ConnectivityStage -Request $effectiveRequest -Config $config -State $state -StatePath $statePath
         if ($network.Mode -eq 'LocalTailscale') {
             # Local Tailscale may be reused without being selected for installation.
@@ -290,11 +300,14 @@ function Invoke-DarckwareInstall {
         }
         $rustDesk = [pscustomobject]@{ Requested = $false; Installed = $false; Configured = $false; Id = '' }
         if ($effectiveRequest.InstallRustDesk) {
+            if ($null -ne $ProgressAction) { & $ProgressAction 0 0 'Preparando RustDesk...' }
             $rustDesk = Invoke-RustDeskStage -Request $effectiveRequest -Config $config -StateRoot $stateRoot -ProgressAction $ProgressAction
         }
 
+        if ($null -ne $ProgressAction) { & $ProgressAction 0 0 'Salvando o resultado da instalacao...' }
         Save-InstallerState -Path $statePath -Config $config -Network $network -PreviousState $state
         Write-InstallerLog -Path $logPath -Text 'Installation completed.'
+        if ($null -ne $ProgressAction) { & $ProgressAction 100 100 'Instalacao concluida.' }
         [pscustomobject]@{
             Success = $true
             Tailscale = $tailscale

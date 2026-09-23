@@ -74,6 +74,25 @@ Describe 'Invoke-DarckwareInstall ordering and secrecy' {
         }
     }
 
+    It 'reports active stages and completion even when no download callback runs' {
+        $events = [Collections.Generic.List[object]]::new()
+        $callback = { param($written, $total, $status) $events.Add(@($written, $total, $status)) }.GetNewClosure()
+        $result = Invoke-DarckwareInstall -Request (New-CoreRequest) -RepoRoot $TestDrive -ProgressAction $callback
+        $result.Success | Should -BeTrue
+        $events.Count | Should -BeGreaterOrEqual 5
+        ($events | ForEach-Object { $_[2] }) -join ' ' | Should -Match 'Tailscale.*conectividade.*RustDesk'
+        $events[$events.Count - 1][0] | Should -Be 100
+        $events[$events.Count - 1][1] | Should -Be 100
+    }
+
+    It 'does not report completion on a failed installation' {
+        Mock Invoke-TailscaleStage -ModuleName Installer.Core { throw 'enrollment failed' }
+        $events = [Collections.Generic.List[object]]::new()
+        $callback = { param($written, $total, $status) $events.Add(@($written, $total, $status)) }.GetNewClosure()
+        { Invoke-DarckwareInstall -Request (New-CoreRequest) -RepoRoot $TestDrive -ProgressAction $callback } | Should -Throw
+        @($events | Where-Object { $_[0] -eq 100 -and $_[1] -eq 100 }).Count | Should -Be 0
+    }
+
     It 'stops before RustDesk when combined Tailscale enrollment fails' {
         Mock Invoke-TailscaleStage -ModuleName Installer.Core { throw 'enrollment failed' }
         $request = New-CoreRequest

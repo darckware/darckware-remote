@@ -32,10 +32,12 @@ Describe 'Get-VerifiedArtifact' {
         Mock Get-AuthenticodeSignature -ModuleName Artifact {
             [pscustomobject]@{ Status = 'Valid'; SignerCertificate = [pscustomobject]@{ Subject = 'CN=Fixture' } }
         }
-        $artifact = [pscustomobject]@{ fileName = 'fixture.exe'; url = 'https://example.test/fixture'; sha256 = ('a' * 64); publisher = 'Fixture' }
-        Get-VerifiedArtifact -Artifact $artifact -CacheRoot $TestDrive -ProgressAction { param($written, $total) $progress.Add([pscustomobject]@{ Written = $written; Total = $total }) } | Out-Null
-        $progress | Should -HaveCount 1
+        $artifact = [pscustomobject]@{ name = 'Fixture'; fileName = 'fixture.exe'; url = 'https://example.test/fixture'; sha256 = ('a' * 64); publisher = 'Fixture' }
+        Get-VerifiedArtifact -Artifact $artifact -CacheRoot $TestDrive -ProgressAction { param($written, $total, $status) $progress.Add([pscustomobject]@{ Written = $written; Total = $total; Status = $status }) } | Out-Null
+        $progress | Should -HaveCount 2
         $progress[0].Written | Should -Be 7
+        $progress[1].Total | Should -Be 0
+        $progress[1].Status | Should -Match 'Validando.*Fixture'
     }
 
     It 'rejects a checksum mismatch before signature verification' {
