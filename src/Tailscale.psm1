@@ -65,6 +65,20 @@ function Get-TailscaleStatus {
 
     $command = Invoke-TailscaleCommand -Arguments @('status', '--json')
     if ($command.ExitCode -ne 0) {
+        # A client signed in through the tray icon is owned by that Windows user, and
+        # tailscaled answers every other account with "already in use by <user>" -- the
+        # tailnet is up, only the CLI is closed to us. The adapter's address shows that.
+        if ($command.Output -match 'already in use by') {
+            $adapterIPs = @(Get-TailscaleAdapterAddress)
+            if ($adapterIPs.Count -gt 0) {
+                return [pscustomobject]@{
+                    Connected = $true
+                    BackendState = 'Running'
+                    TailscaleIPs = $adapterIPs
+                    Source = 'Adapter'
+                }
+            }
+        }
         throw 'Tailscale status command failed.'
     }
 
@@ -84,7 +98,38 @@ function Get-TailscaleStatus {
         Connected = ($backendState -ceq 'Running' -and $tailscaleIPs.Count -gt 0)
         BackendState = $backendState
         TailscaleIPs = $tailscaleIPs
+        Source = 'Cli'
     }
+}
+
+function Test-TailscaleAddress {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Address
+    )
+
+    # Tailscale assigns IPv4 addresses from the CGNAT range 100.64.0.0/10.
+    $parsed = $null
+    if (-not [System.Net.IPAddress]::TryParse($Address, [ref]$parsed)) { return $false }
+    if ($parsed.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+    $bytes = $parsed.GetAddressBytes()
+    return ($bytes[0] -eq 100 -and $bytes[1] -ge 64 -and $bytes[1] -le 127)
+}
+
+function Get-TailscaleAdapterAddress {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param()
+
+    $addresses = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object {
+        $_.InterfaceAlias -like 'Tailscale*' -and
+        [string]$_.AddressState -eq 'Preferred' -and
+        (Test-TailscaleAddress -Address ([string]$_.IPAddress))
+    })
+    return @($addresses | ForEach-Object { [string]$_.IPAddress })
 }
 
 function Install-Tailscale {

@@ -106,6 +106,51 @@ Describe 'Get-TailscaleStatus' {
         }
         { Get-TailscaleStatus } | Should -Throw '*invalid JSON*'
     }
+
+    It 'falls back to the adapter address when another Windows user owns the client' {
+        Mock Invoke-TailscaleCommand -ModuleName Tailscale {
+            [pscustomobject]@{ ExitCode = 1; Output = '401 Unauthorized: Tailscale already in use by PC01\maria, pid 8404' }
+        }
+        Mock Get-NetIPAddress -ModuleName Tailscale {
+            @(
+                [pscustomobject]@{ InterfaceAlias = 'Ethernet'; IPAddress = '192.168.0.10'; AddressState = 'Preferred' }
+                [pscustomobject]@{ InterfaceAlias = 'Tailscale'; IPAddress = '100.79.188.83'; AddressState = 'Preferred' }
+            )
+        }
+
+        $status = Get-TailscaleStatus
+
+        $status.Connected | Should -BeTrue
+        $status.Source | Should -Be 'Adapter'
+        $status.TailscaleIPs | Should -HaveCount 1
+        $status.TailscaleIPs[0] | Should -Be '100.79.188.83'
+    }
+
+    It 'still fails closed when the client is owned by another user and the adapter has no tailnet address' {
+        Mock Invoke-TailscaleCommand -ModuleName Tailscale {
+            [pscustomobject]@{ ExitCode = 1; Output = 'Tailscale already in use by PC01\maria' }
+        }
+        Mock Get-NetIPAddress -ModuleName Tailscale {
+            @(
+                [pscustomobject]@{ InterfaceAlias = 'Tailscale'; IPAddress = '169.254.10.1'; AddressState = 'Preferred' }
+                [pscustomobject]@{ InterfaceAlias = 'Ethernet'; IPAddress = '100.70.0.1'; AddressState = 'Preferred' }
+            )
+        }
+
+        { Get-TailscaleStatus } | Should -Throw '*status command failed*'
+    }
+
+    It 'never uses the adapter fallback for other status failures' {
+        Mock Invoke-TailscaleCommand -ModuleName Tailscale {
+            [pscustomobject]@{ ExitCode = 1; Output = 'not logged in' }
+        }
+        Mock Get-NetIPAddress -ModuleName Tailscale {
+            @([pscustomobject]@{ InterfaceAlias = 'Tailscale'; IPAddress = '100.79.188.83'; AddressState = 'Preferred' })
+        }
+
+        { Get-TailscaleStatus } | Should -Throw '*status command failed*'
+        Should -Invoke Get-NetIPAddress -ModuleName Tailscale -Times 0 -Exactly
+    }
 }
 
 Describe 'Connect-Tailscale' {
