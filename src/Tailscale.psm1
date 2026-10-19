@@ -49,8 +49,17 @@ function Invoke-TailscaleCommand {
     )
 
     $executable = Get-TailscaleExecutable
-    $output = & $executable @Arguments 2>&1
-    $exitCode = $LASTEXITCODE
+    # Windows PowerShell turns a native command's stderr into ErrorRecords under 2>&1, and the
+    # launcher's 'Stop' preference throws on the first one before the exit code can be read.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & $executable @Arguments 2>&1 | ForEach-Object { [string]$_ }
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
 
     [pscustomobject]@{
         ExitCode = $exitCode

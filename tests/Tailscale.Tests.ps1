@@ -67,6 +67,21 @@ Describe 'Install-Tailscale' {
     }
 }
 
+Describe 'Invoke-TailscaleCommand' {
+    It 'returns the exit code and stderr text even under a Stop preference' {
+        $fake = Join-Path $TestDrive 'tailscale-fake.cmd'
+        Set-Content -LiteralPath $fake -Value "@echo 401 Unauthorized: Tailscale already in use by PC01\maria 1>&2`r`n@exit /b 1" -Encoding ASCII
+        Mock Get-TailscaleExecutable -ModuleName Tailscale { $fake }
+
+        InModuleScope Tailscale -Parameters @{ Fake = $fake } {
+            $ErrorActionPreference = 'Stop'
+            $result = Invoke-TailscaleCommand -Arguments @('status', '--json')
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'already in use by'
+        }
+    }
+}
+
 Describe 'Get-TailscaleStatus' {
     It 'reports connected only for Running state with at least one tailnet IP' {
         Mock Invoke-TailscaleCommand -ModuleName Tailscale {
