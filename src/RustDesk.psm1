@@ -67,7 +67,14 @@ function Wait-RustDeskService {
     [CmdletBinding()]
     param()
 
-    $service = Get-Service -Name 'RustDesk' -ErrorAction Stop
+    # A fresh install registers the service a few seconds after the executable appears.
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    while ($null -eq ($service = Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue)) {
+        if ([DateTime]::UtcNow -ge $deadline) {
+            throw 'RustDesk service was not registered after installation.'
+        }
+        Start-Sleep -Milliseconds 500
+    }
     if ($service.Status -ne 'Running') {
         Start-Service -Name 'RustDesk' -ErrorAction Stop
     }
@@ -87,7 +94,10 @@ function Wait-RustDeskService {
 function Install-RustDesk {
     [CmdletBinding()]
     [OutputType([pscustomobject])]
-    param([Parameter(Mandatory)][string]$InstallerPath)
+    param(
+        [Parameter(Mandatory)][string]$InstallerPath,
+        [ValidateRange(0, 600)][int]$ExecutableTimeoutSeconds = 120
+    )
 
     if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
         throw 'A verified RustDesk installer path is required.'
@@ -112,8 +122,14 @@ function Install-RustDesk {
             }
         }
         finally { $process.Dispose() }
-        if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
-            throw 'RustDesk executable was not found after installation.'
+        # The downloaded EXE is a launcher: it extracts itself, relaunches the copy with
+        # --silent-install and exits 0 before Program Files is populated.
+        $deadline = [DateTime]::UtcNow.AddSeconds($ExecutableTimeoutSeconds)
+        while (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
+            if ([DateTime]::UtcNow -ge $deadline) {
+                throw "RustDesk executable was not found $ExecutableTimeoutSeconds seconds after installation."
+            }
+            Start-Sleep -Seconds 1
         }
     }
 

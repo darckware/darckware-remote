@@ -49,6 +49,28 @@ Describe 'Install-RustDesk' {
         Should -Invoke Wait-RustDeskService -ModuleName RustDesk -Times 1
     }
 
+    It 'waits for the executable the relaunched installer writes after the launcher exits' {
+        $pathChecks = [System.Collections.Queue]::new()
+        @($false, $false, $false, $true) | ForEach-Object { $pathChecks.Enqueue($_) }
+        Mock Test-Path -ModuleName RustDesk { $pathChecks.Dequeue() }
+        Mock Start-Sleep -ModuleName RustDesk {}
+
+        $result = Install-RustDesk -InstallerPath 'C:\cache\rustdesk.exe'
+
+        $result.Installed | Should -BeTrue
+        Should -Invoke Start-Sleep -ModuleName RustDesk -Times 2 -Exactly
+        Should -Invoke Wait-RustDeskService -ModuleName RustDesk -Times 1
+    }
+
+    It 'fails when the executable never appears within the deadline' {
+        Mock Test-Path -ModuleName RustDesk { $false }
+        Mock Start-Sleep -ModuleName RustDesk {}
+
+        { Install-RustDesk -InstallerPath 'C:\cache\rustdesk.exe' -ExecutableTimeoutSeconds 0 } |
+            Should -Throw '*not found 0 seconds after installation*'
+        Should -Invoke Wait-RustDeskService -ModuleName RustDesk -Times 0
+    }
+
     It 'rejects a nonzero installer exit code before waiting for the service' {
         Mock Test-Path -ModuleName RustDesk { $false }
         Mock Start-Process -ModuleName RustDesk { New-InstallerProcessStub -ExitCode 7 }
